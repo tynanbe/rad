@@ -1,0 +1,41 @@
+#!/bin/sh -e
+
+self="rad"
+module="./build/dev/javascript/${self}/dist/${self}.mjs"
+
+fail() {
+  message="${1}"
+  echo -e "\e[91m${message}\e[0m" 1>&2
+  exit 1
+}
+
+snag=""
+for dependency in "gleam" "node"; do
+  if ! type "${dependency}" > /dev/null 2>&1; then
+    if test -n "${snag}"; then
+      snag="${snag}\n"
+    fi
+    snag="${snag}error: \`${dependency}\` required but not found"
+  fi
+done
+if test -n "${snag}"; then
+  fail "$snag"
+fi
+
+# Compile if necessary.
+#
+# Redirect stdout to stderr, keeping stdout clear for the given task.
+#
+if ! test -f "${module}"; then
+  gleam build --target=javascript 1>&2
+fi
+if ! test -f "${module}"; then
+  fail "error: \`${module}\` not found; try \`gleam add --dev ${self}\`"
+fi
+
+exec node \
+  --experimental-repl-await \
+  --no-deprecation \
+  --title="${self}" \
+  --eval="import('${module}').then(module => module.main())" \
+  -- "${@}"

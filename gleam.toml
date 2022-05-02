@@ -1,0 +1,29 @@
+name = "rad"
+version = "0.0.1"
+description = "A task runner for Gleam projects"
+licences = ["Apache-2.0"]
+#target = "javascript"
+
+[repository]
+repo = "rad"
+user = "tynanbe"
+type = "github"
+
+[[links]]
+href = "https://gleam.run/"
+title = "Website"
+
+[dependencies]
+gleam_erlang = "~> 0.9"
+gleam_javascript = "~> 0.1"
+gleam_stdlib = "~> 0.19"
+glint = "~> 0.6"
+snag = "~> 0.2"
+tomerl = "~> 0.5"
+
+[dev-dependencies]
+gleeunit = "~> 0.6"
+
+[rad]
+module = "rad"
+with = "javascript"
