@@ -1,0 +1,5 @@
+[[overrides]]
+files = "**/*.{js,mjs}"
+
+  [overrides.options]
+  parser = "meriyah"

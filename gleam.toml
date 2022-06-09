@@ -1,5 +1,5 @@
 name = "rad"
-version = "0.0.1"
+version = "0.1.0-dev"
 description = "A task runner for Gleam projects"
 licences = ["Apache-2.0"]
 #target = "javascript"
@@ -16,8 +16,9 @@ title = "Website"
 [dependencies]
 gleam_erlang = "~> 0.9"
 gleam_javascript = "~> 0.1"
-gleam_stdlib = "~> 0.19"
-glint = "~> 0.6"
+gleam_stdlib = "~> 0.21"
+glint = "~> 0.8"
+shellout = "~> 1.0"
 snag = "~> 0.2"
 tomerl = "~> 0.5"
 

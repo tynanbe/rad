@@ -11,23 +11,40 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: "24.3"
-          gleam-version: "0.21.0"
+          otp-version: "25.0"
+          gleam-version: nightly
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16
+
+      - uses: charlieegan3/fetch-gh-release-binary@main
+        with:
+          owner: rome
+          repo: tools
+          version: cli/v0.6.1-next
+          asset-pattern: linux-x64
+          install-path: /usr/local/bin/rome
+          verbose: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - run: gleam format --check src test
 
+      - run: rome ci --indent-style=space src test
+
       - run: gleam deps download
 
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         with:
           path: build/packages
           key: ${{ runner.os }}-gleam-${{ hashFiles('**/manifest.toml') }}
           restore-keys: ${{ runner.os }}-gleam-
 
-      - run: gleam test
+      - run: gleam test --target=erlang
 
       - run: gleam test --target=javascript
