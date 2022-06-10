@@ -2,7 +2,7 @@ name = "rad"
 version = "0.1.0-dev"
 description = "A task runner for Gleam projects"
 licences = ["Apache-2.0"]
-#target = "javascript"
+target = "javascript"
 
 [repository]
 repo = "rad"
