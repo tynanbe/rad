@@ -1,6 +1,7 @@
 import gleam/dynamic
 import gleam/function
 import gleam/int
+import gleam/io
 import gleam/list
 import gleam/map
 import gleam/pair
@@ -8,8 +9,8 @@ import gleam/result
 import gleam/string
 import glint.{CommandInput}
 import glint/flag.{Flag}
-import rad/util
-import shellout.{LetBeStderr, LetBeStdout, Lookups, StyleFlags}
+import rad/util.{rad_path}
+import shellout.{LetBeStderr, LetBeStdout, Lookups}
 import snag.{Snag}
 
 /// TODO
@@ -57,8 +58,6 @@ pub const path_color = "boi-blue"
 ///
 pub const subcommand_color = "mint"
 
-const rad_path = "./build/dev/javascript/rad"
-
 const tab = "    "
 
 /// TODO
@@ -101,7 +100,7 @@ pub fn tasks() -> Tasks {
 
   let target = case util.toml(read: "gleam.toml", get: ["target"]) {
     Ok(target) -> target
-    _ -> "erlang"
+    Error(_message) -> "erlang"
   }
   let target_flags = [
     flag.string(
@@ -111,11 +110,31 @@ pub fn tasks() -> Tasks {
     ),
   ]
 
+  let watch_flags = [
+    flag.bool(
+      called: "no-docs",
+      default: False,
+      explained: "Disable docs handling",
+    ),
+    flag.int(
+      called: "port",
+      default: 7000,
+      explained: "Request live reloads over port (default 7000)",
+    ),
+    ..target_flags
+  ]
+
   [
     Task(
       path: [],
-      run: help(tasks(), [], _),
-      flags: [],
+      run: root,
+      flags: [
+        flag.bool(
+          called: "version",
+          default: False,
+          explained: "Print rad's version",
+        ),
+      ],
       shortdoc: "",
       parameters: [],
     ),
@@ -190,7 +209,7 @@ pub fn tasks() -> Tasks {
     ),
     Task(
       path: ["docs", "build"],
-      run: gleam(["docs", "build"], _),
+      run: docs_build,
       flags: [],
       shortdoc: "Render HTML documentation",
       parameters: [],
@@ -199,10 +218,20 @@ pub fn tasks() -> Tasks {
       path: ["docs", "serve"],
       run: docs_serve,
       flags: [
+        flag.string(
+          called: "host",
+          default: "localhost",
+          explained: "Bind to host (default localhost)",
+        ),
+        flag.bool(
+          called: "no-live",
+          default: False,
+          explained: "Disable live reloading",
+        ),
         flag.int(
           called: "port",
-          default: 3000,
-          explained: "Change the port (default 3000)",
+          default: 7000,
+          explained: "Listen on port (default 7000)",
         ),
       ],
       shortdoc: "Serve HTML documentation",
@@ -288,8 +317,15 @@ pub fn tasks() -> Tasks {
     Task(
       path: ["watch"],
       run: watch,
-      flags: target_flags,
+      flags: watch_flags,
       shortdoc: "Automate the project tests",
+      parameters: [],
+    ),
+    Task(
+      path: ["watch", "do"],
+      run: watch_do,
+      flags: watch_flags,
+      shortdoc: "",
       parameters: [],
     ),
   ]
@@ -303,41 +339,88 @@ pub fn config(input: CommandInput) -> Result(String, Snag) {
 
 /// TODO
 ///
-pub fn docs_serve(input: CommandInput) -> Result(String, Snag) {
-  assert Ok(flag.I(port)) = flag.get_value(from: input.flags, for: "port")
+pub fn docs_build(input: CommandInput) -> Result(String, Snag) {
+  try path = case input.args {
+    [] -> Ok(".")
+    _args -> {
+      try name = util.dependency(input.args)
+      ["./build/packages/", name]
+      |> string.concat
+      |> Ok
+    }
+  }
   shellout.command(
-    // TODO replace with wonton
-    run: string.concat([rad_path, "/priv/node_modules/.bin/derver"]),
-    with: [
-      // TODO --no-watch, handle with rad watch?
-      string.concat(["--port=", int.to_string(port)]),
-      "./build/dev/docs/rad",
-    ],
-    in: ".",
+    run: "gleam",
+    with: ["docs", "build"],
+    in: path,
     opt: [LetBeStderr, LetBeStdout],
   )
+  |> result.map(with: fn(_output) {
+    case path {
+      "." -> Nil
+      _path ->
+        ["relative to the dependency's base directory at\n./", path]
+        |> string.concat
+        |> io.println
+    }
+    ""
+  })
   |> result.replace_error(snag.new("task failed"))
 }
 
 /// TODO
 ///
+pub fn docs_serve(input: CommandInput) -> Result(String, Snag) {
+  try _output = docs_build(input)
+
+  io.println("")
+
+  let docs_path = "/build/dev/docs/"
+
+  try path = case input.args {
+    [] ->
+      CommandInput(..input, args: ["name"])
+      |> config
+      |> result.map(with: fn(name) { string.concat([".", docs_path, name]) })
+    _args -> {
+      try name = util.dependency(input.args)
+      ["./build/packages/", name, docs_path, name]
+      |> string.concat
+      |> Ok
+    }
+  }
+
+  assert Ok(flag.S(host)) = flag.get_value(from: input.flags, for: "host")
+  assert Ok(flags) = case host == "localhost" {
+    True -> flag.update_flags(in: input.flags, with: "--host=127.0.0.1")
+    False -> Ok(input.flags)
+  }
+
+  [
+    [string.concat([rad_path, "/priv/node_modules/wonton/src/bin.js"])],
+    util.relay_flags(flags),
+    ["--", path],
+  ]
+  |> list.flatten
+  |> util.javascript_run(opt: [LetBeStderr, LetBeStdout])
+  |> result.replace("")
+}
+
+/// TODO
+///
 pub fn format(input: CommandInput) -> Result(String, Snag) {
-  // TODO run all, layer snags
+  // TODO run all regardless of errors, layer snags
   gleam(["format"], input)
-  |> result.then(apply: fn(_) {
-    shellout.command(
-      // TODO config override commands
-      run: string.concat([rad_path, "/priv/node_modules/.bin/prettier"]),
-      with: list.flatten([
+  |> result.then(apply: fn(_output) {
+    shellout.command(// TODO config override commands
+      // TODO rome
+      run: string.concat([rad_path, "/priv/node_modules/.bin/prettier"]), with: list.flatten([
         ["--config", string.concat([rad_path, "/priv/.prettierrc.toml"])],
         ["--no-error-on-unmatched-pattern"],
         // TODO
         //"--check",
         ["src"],
-      ]),
-      in: ".",
-      opt: [LetBeStderr, LetBeStdout],
-    )
+      ]), in: ".", opt: [LetBeStderr, LetBeStdout])
     |> result.replace_error(snag.new("javascript formatting issue"))
   })
 }
@@ -345,24 +428,10 @@ pub fn format(input: CommandInput) -> Result(String, Snag) {
 /// TODO
 ///
 pub fn gleam(path: List(String), input: CommandInput) -> Result(String, Snag) {
-  let flags =
-    input.flags
-    |> map.to_list
-    |> list.filter_map(with: fn(flag) {
-      let #(key, flag.Contents(value: value, ..)) = flag
-      case value {
-        flag.S(value) ->
-          ["--", key, "=", value]
-          |> string.concat
-          |> Ok
-        flag.B(value) if value -> Ok(string.concat(["--", key]))
-        _ -> Error(Nil)
-      }
-    })
-  [path, flags, input.args]
+  [path, util.relay_flags(input.flags), input.args]
   |> list.flatten
   |> shellout.command(run: "gleam", in: ".", opt: [LetBeStderr, LetBeStdout])
-  |> result.map(with: fn(_) { "" })
+  |> result.replace("")
   |> result.replace_error(snag.new("task failed"))
 }
 
@@ -389,7 +458,7 @@ pub fn info() -> Result(String, Snag) {
 
   try config = case project {
     "rad" -> Ok(config)
-    _ -> {
+    _name -> {
       let file = "build/packages/rad/gleam.toml"
       file
       |> util.toml_read_file
@@ -477,7 +546,7 @@ pub fn help(
 
   let path = case path {
     ["help"] -> input.args
-    _ -> path
+    _path -> path
   }
 
   try task =
@@ -494,7 +563,7 @@ pub fn help(
       let #(compare_path, subpath) =
         task.path
         |> list.split(at: list.length(path))
-      case path == compare_path && list.length(subpath) == 1 {
+      case path == compare_path && list.length(subpath) == 1 && task.shortdoc != "" {
         True ->
           Task(..task, path: subpath)
           |> Ok
@@ -673,17 +742,14 @@ pub fn name(input: CommandInput) -> Result(String, Snag) {
     [] ->
       CommandInput(..input, args: ["name"])
       |> config
-    path ->
-      path
-      |> util.packages
-      |> result.map(with: fn(_) {
-        assert [name] = path
-        name
-      })
+    _args -> {
+      try name = util.dependency(input.args)
+      Ok(name)
+    }
   }
   |> result.map(with: shellout.style(
     _,
-    with: style_flags(input.flags),
+    with: util.style_flags(input.flags),
     custom: lookups,
   ))
 }
@@ -702,18 +768,42 @@ pub fn origin(_input: CommandInput) -> Result(String, Snag) {
 
 /// TODO
 ///
+pub fn root(input: CommandInput) -> Result(String, Snag) {
+  assert Ok(flag.B(ver)) = flag.get_value(from: input.flags, for: "version")
+  case ver {
+    False -> help(tasks(), [], input)
+    True -> {
+      let flags =
+        flag.build_map([
+          #("bare", flag.Contents(value: flag.B(False), description: "")),
+        ])
+      let version = fn(args) {
+        args
+        |> CommandInput(flags: flags)
+        |> version
+      }
+      ["rad"]
+      |> version
+      |> result.lazy_or(fn() { version([]) })
+    }
+  }
+}
+
+/// TODO
+///
 pub fn shell(input: CommandInput) -> Result(String, Snag) {
   do_shell(input)
 }
 
 if erlang {
   fn do_shell(_input: CommandInput) -> Result(String, Snag) {
-    refuse_erlang()
+    util.refuse_erlang()
   }
 }
 
 if javascript {
   fn do_shell(input: CommandInput) -> Result(String, Snag) {
+    let options = [LetBeStderr, LetBeStdout]
     let runtime = case input.args {
       [] -> "erlang"
       [runtime, ..] -> runtime
@@ -736,25 +826,30 @@ if javascript {
               ["--erl", string.join(["-pa", ..ebins], with: " ")],
             ]),
             in: ".",
-            opt: [LetBeStderr, LetBeStdout],
+            opt: options,
           )
           |> result.replace_error(snag.new("failed to run `iex` shell"))
         })
 
       "nodejs" | "node" ->
-        util.javascript_run([
-          "--interactive",
-          string.concat([
-            "--eval=import('",
-            rad_path,
-            "/dist/rad_ffi.mjs')",
-            ".then(module => module.load_modules())",
-          ]),
-        ])
+        util.javascript_run(
+          with: [
+            "--interactive",
+            [
+              ["--eval=import('"],
+              [rad_path, "/dist/rad_ffi.mjs"],
+              ["')"],
+              [".then(module => module.load_modules())"],
+            ]
+            |> list.flatten
+            |> string.concat,
+          ],
+          opt: options,
+        )
 
-      "erlang" | "erl" -> util.erlang_run([])
+      "erlang" | "erl" -> util.erlang_run(with: [], opt: options)
 
-      _ ->
+      _runtime ->
         ["unsupported runtime `", runtime, "`"]
         |> string.concat
         |> snag.new
@@ -804,7 +899,7 @@ pub fn tree(_input: CommandInput) -> Result(String, Snag) {
         opt: [],
       )
       |> result.replace_error(snag.layer(error, "command `tree` not found"))
-    _ -> result
+    Ok(_output) -> result
   }
   |> result.map_error(with: function.compose(
     snag.layer(_, "failed to find a known tree command"),
@@ -840,14 +935,24 @@ pub fn watch(input: CommandInput) -> Result(String, Snag) {
 
 if erlang {
   fn do_watch(_input: CommandInput) -> Result(String, Snag) {
-    refuse_erlang()
+    util.refuse_erlang()
   }
 }
 
 if javascript {
   fn do_watch(input: CommandInput) -> Result(String, Snag) {
     let options = [LetBeStderr, LetBeStdout]
-    assert Ok(flag.S(target)) = flag.get_value(from: input.flags, for: "target")
+    let rad = util.which_rad()
+    let flags = util.relay_flags(input.flags)
+    [
+      " Watching"
+      |> shellout.style(with: shellout.color(["magenta"]), custom: lookups),
+      " … "
+      |> shellout.style(with: shellout.color(["cyan"]), custom: lookups),
+      "(Ctrl+C to quit)",
+    ]
+    |> string.concat
+    |> io.println
     let result =
       shellout.command(
         run: "watchexec",
@@ -859,7 +964,7 @@ if javascript {
           }),
           ["--postpone"],
           ["--watch-when-idle"],
-          ["--", "gleam", "test", string.concat(["--target=", target])],
+          ["--", rad, "watch", "do", ..flags],
         ]),
         in: ".",
         opt: options,
@@ -890,8 +995,8 @@ if javascript {
           },
           do: fn() {
             shellout.command(
-              run: "gleam",
-              with: ["test", string.concat(["--target=", target])],
+              run: rad,
+              with: ["watch", "do", ..flags],
               in: ".",
               opt: options,
             )
@@ -901,7 +1006,7 @@ if javascript {
           error,
           "command `inotifywait` not found",
         ))
-      _ -> result
+      Ok(_output) -> result
     }
     |> result.map_error(with: function.compose(
       snag.layer(_, "failed to find a known watcher command"),
@@ -918,25 +1023,42 @@ if javascript {
 
 /// TODO
 ///
-pub fn style_flags(flags: flag.Map) -> StyleFlags {
-  flags
-  |> map.filter(for: fn(_key, contents) {
-    let flag.Contents(value: value, ..) = contents
-    case value {
-      flag.LS(_) -> True
-      _ -> False
+pub fn watch_do(input: CommandInput) -> Result(String, Snag) {
+  let options = [LetBeStderr, LetBeStdout]
+  assert Ok(flag.B(no_docs)) = flag.get_value(from: input.flags, for: "no-docs")
+  assert Ok(flag.I(port)) = flag.get_value(from: input.flags, for: "port")
+  assert Ok(flag.S(target)) = flag.get_value(from: input.flags, for: "target")
+  io.println("")
+  case no_docs {
+    False -> {
+      [
+        " Generating"
+        |> shellout.style(with: shellout.color(["magenta"]), custom: lookups),
+        "documentation",
+      ]
+      |> string.join(with: " ")
+      |> io.println
+      let _result =
+        shellout.command(
+          run: "gleam",
+          with: ["docs", "build"],
+          in: ".",
+          opt: [],
+        )
+      // Live reload docs
+      ["http://localhost:", int.to_string(port), "/wonton-update"]
+      |> string.concat
+      |> util.ping
+      Nil
     }
-  })
-  |> map.map_values(with: fn(_key, contents) {
-    let flag.Contents(value: value, ..) = contents
-    assert flag.LS(value) = value
-    value
-  })
-}
-
-if erlang {
-  fn refuse_erlang() -> Result(String, Snag) {
-    snag.error("task cannot be run with erlang")
-    |> snag.context("failed to run task")
+    True -> Nil
   }
+  shellout.command(
+    run: "gleam",
+    with: ["test", string.concat(["--target=", target])],
+    in: ".",
+    opt: options,
+  )
+  |> result.replace("")
+  |> result.replace_error(snag.new("test failed"))
 }

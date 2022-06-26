@@ -191,7 +191,7 @@ fn rad_run(with: String, fun: fn() -> Nil) -> Nil {
           ["-extra", ..shellout.arguments()],
         ]
         |> list.flatten
-        |> util.erlang_run
+        |> util.erlang_run(opt: [LetBeStderr, LetBeStdout])
       })
       |> end_task
 
@@ -204,7 +204,7 @@ fn rad_run(with: String, fun: fn() -> Nil) -> Nil {
         ["--", ..shellout.arguments()],
       ]
       |> list.flatten
-      |> util.javascript_run
+      |> util.javascript_run(opt: [LetBeStderr, LetBeStdout])
       |> end_task
 
     _, _ ->

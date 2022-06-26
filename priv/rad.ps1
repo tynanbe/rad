@@ -36,8 +36,9 @@ if (-not (Test-Path -Type Leaf "${module}")) {
 }
 
 & node `
+  --experimental-fetch `
   --experimental-repl-await `
-  --no-deprecation `
+  --no-warnings `
   --title="${self}" `
   --eval="import('${module}').then(module => module.main())" `
   -- @Args

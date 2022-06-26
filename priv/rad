@@ -34,8 +34,9 @@ if ! test -f "${module}"; then
 fi
 
 exec node \
+  --experimental-fetch \
   --experimental-repl-await \
-  --no-deprecation \
+  --no-warnings \
   --title="${self}" \
   --eval="import('${module}').then(module => module.main())" \
   -- "${@}"
