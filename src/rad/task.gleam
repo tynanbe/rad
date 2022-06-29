@@ -4,6 +4,7 @@ import gleam/int
 import gleam/io
 import gleam/list
 import gleam/map
+import gleam/option.{None, Some}
 import gleam/pair
 import gleam/result
 import gleam/string
@@ -98,7 +99,11 @@ pub fn tasks() -> Tasks {
     ),
   ]
 
-  let target = case util.toml(read: "gleam.toml", get: ["target"]) {
+  let target = case util.toml(
+    read: "gleam.toml",
+    get: ["target"],
+    expect: dynamic.string,
+  ) {
     Ok(target) -> target
     Error(_message) -> "erlang"
   }
@@ -107,6 +112,14 @@ pub fn tasks() -> Tasks {
       called: "target",
       default: target,
       explained: "The platform to target",
+    ),
+  ]
+
+  let docs_flags = [
+    flag.bool(
+      called: "all",
+      default: False,
+      explained: "Build docs for all packages",
     ),
   ]
 
@@ -183,7 +196,7 @@ pub fn tasks() -> Tasks {
       path: ["config"],
       run: config,
       flags: [],
-      shortdoc: "Read project config values",
+      shortdoc: "Print project config values",
       parameters: [#("<path>", "TOML breadcrumb(s), space-separated")],
     ),
     Task(
@@ -210,9 +223,11 @@ pub fn tasks() -> Tasks {
     Task(
       path: ["docs", "build"],
       run: docs_build,
-      flags: [],
+      flags: docs_flags,
       shortdoc: "Render HTML documentation",
-      parameters: [],
+      parameters: [
+        #("..[packages]", "Package name(s) (default: current project)"),
+      ],
     ),
     Task(
       path: ["docs", "serve"],
@@ -233,9 +248,15 @@ pub fn tasks() -> Tasks {
           default: 7000,
           explained: "Listen on port (default 7000)",
         ),
+        ..docs_flags
       ],
       shortdoc: "Serve HTML documentation",
-      parameters: [],
+      parameters: [
+        #(
+          "..[packages]",
+          "Package name(s) to build docs for (default: current project)",
+        ),
+      ],
     ),
     Task(
       path: ["format"],
@@ -333,39 +354,188 @@ pub fn tasks() -> Tasks {
 
 /// TODO
 ///
+pub fn tasks_from_config() -> Tasks {
+  let list_string = fn(key) {
+    let snag =
+      ["expected `", key, "` in `[[rad.tasks]]` of type `List(String)`"]
+      |> string.concat
+      |> snag.new
+    function.compose(
+      dynamic.field(key, dynamic.list(dynamic.string)),
+      result.replace_error(_, snag),
+    )
+  }
+  assert Ok(tasks) =
+    util.toml(
+      read: "gleam.toml",
+      get: ["rad", "tasks"],
+      expect: dynamic.shallow_list,
+    )
+    |> result.map(with: list.map(_, with: fn(item) {
+      // Require `path` and `run` for every task
+      //
+      let path =
+        item
+        |> list_string("path")
+      let run =
+        item
+        |> list_string("run")
+      let #(path, run) = case path, run {
+        Ok(path), Ok(run) -> #(path, run)
+        _path, _run -> {
+          case path, run {
+            Error(path), Ok(_run) -> [path.issue]
+            Ok(_path), Error(run) -> [run.issue]
+            Error(path), Error(run) -> [path.issue, run.issue]
+          }
+          |> Snag(issue: "malformed task in `gleam.toml`")
+          |> snag.pretty_print
+          |> io.print
+          shellout.exit(1)
+          #([], [])
+        }
+      }
+      let shortdoc = case item
+      |> dynamic.field("shortdoc", dynamic.string) {
+        Ok(shortdoc) -> shortdoc
+        Error(_decode_error) -> ""
+      }
+      Task(
+        path: path,
+        run: user(run, _),
+        flags: [],
+        shortdoc: shortdoc,
+        parameters: [],
+      )
+    }))
+    |> result.or(Ok([]))
+  tasks
+}
+
+/// Sort [`Tasks`](#Tasks) alphabetically by `path`.
+///
+pub fn sort_tasks(tasks: Tasks) -> Tasks {
+  list.sort(
+    tasks,
+    by: fn(a, b) {
+      let #(a, b) = remove_common_path(a.path, b.path)
+      string.compare(a, b)
+    },
+  )
+}
+
+fn remove_common_path(a: List(String), b: List(String)) -> #(String, String) {
+  let nonempty = fn(strings) {
+    case strings == [] {
+      False -> strings
+      True -> [""]
+    }
+  }
+  let [head_a, ..a] = nonempty(a)
+  let [head_b, ..b] = nonempty(b)
+  case head_a == head_b {
+    True -> remove_common_path(a, b)
+    False -> #(head_a, head_b)
+  }
+}
+
+/// TODO
+///
 pub fn config(input: CommandInput) -> Result(String, Snag) {
-  util.toml(read: "gleam.toml", get: input.args)
+  util.toml(read: "gleam.toml", get: input.args, expect: dynamic.dynamic)
+  |> result.map(with: util.json_encode)
 }
 
 /// TODO
 ///
 pub fn docs_build(input: CommandInput) -> Result(String, Snag) {
-  try path = case input.args {
-    [] -> Ok(".")
-    _args -> {
-      try name = util.dependency(input.args)
-      ["./build/packages/", name]
-      |> string.concat
-      |> Ok
+  assert Ok(flag.B(all)) = flag.get_value(from: input.flags, for: "all")
+  let input = case all {
+    False -> input
+    True -> {
+      // Prepare to build documentation for all Gleam dependencies
+      //
+      let flags =
+        False
+        |> flag.B
+        |> flag.Contents(description: "")
+        |> map.insert(into: input.flags, for: "all")
+      let input =
+        [["dependencies"], ["dev-dependencies"]]
+        |> list.map(with: util.toml(
+          read: "gleam.toml",
+          get: _,
+          expect: util.dynamic_object(dynamic.string, dynamic.string),
+        ))
+        |> result.values
+        |> list.map(with: map.keys)
+        |> list.flatten
+        |> list.unique
+        |> list.filter(for: fn(name) {
+          ["./build/packages/", name, "/gleam.toml"]
+          |> string.concat
+          |> util.is_file
+        })
+        |> CommandInput(flags: flags)
+      case input.args == [] {
+        False -> {
+          // Build documentation for the base project
+          //
+          []
+          |> CommandInput(flags: flags)
+          |> docs_build
+          io.println("")
+        }
+        True -> Nil
+      }
+      input
     }
   }
-  shellout.command(
-    run: "gleam",
-    with: ["docs", "build"],
-    in: path,
-    opt: [LetBeStderr, LetBeStdout],
-  )
-  |> result.map(with: fn(_output) {
-    case path {
-      "." -> Nil
-      _path ->
-        ["relative to the dependency's base directory at\n./", path]
-        |> string.concat
-        |> io.println
+  let args = input.args
+  let extra_args = case args {
+    [_, ..args] if args != [] -> Some(args)
+    _args -> None
+  }
+  try #(name, path) = case extra_args {
+    None if args == [] ->
+      #("", ".")
+      |> Ok
+    _args ->
+      args
+      |> list.take(up_to: 1)
+      |> util.dependency
+      |> result.map(with: fn(name) {
+        #(name, string.concat(["./build/packages/", name]))
+      })
+  }
+  let result =
+    shellout.command(
+      run: "gleam",
+      with: ["docs", "build"],
+      in: path,
+      opt: [LetBeStderr, LetBeStdout],
+    )
+    |> result.replace_error(snag.new("task failed"))
+    |> result.then(apply: fn(_output) {
+      case path {
+        "." -> Ok("")
+        _path -> {
+          let new_path = string.concat(["./build/dev/docs/", name])
+          try _result = util.recursive_delete(new_path)
+          [path, "/build/dev/docs/", name]
+          |> string.concat
+          |> util.rename(to: new_path)
+        }
+      }
+    })
+  case extra_args {
+    Some(args) -> {
+      io.println("")
+      CommandInput(..input, args: args)
+      |> docs_build
     }
-    ""
-  })
-  |> result.replace_error(snag.new("task failed"))
+    None -> result
+  }
 }
 
 /// TODO
@@ -374,21 +544,6 @@ pub fn docs_serve(input: CommandInput) -> Result(String, Snag) {
   try _output = docs_build(input)
 
   io.println("")
-
-  let docs_path = "/build/dev/docs/"
-
-  try path = case input.args {
-    [] ->
-      CommandInput(..input, args: ["name"])
-      |> config
-      |> result.map(with: fn(name) { string.concat([".", docs_path, name]) })
-    _args -> {
-      try name = util.dependency(input.args)
-      ["./build/packages/", name, docs_path, name]
-      |> string.concat
-      |> Ok
-    }
-  }
 
   assert Ok(flag.S(host)) = flag.get_value(from: input.flags, for: "host")
   assert Ok(flags) = case host == "localhost" {
@@ -399,7 +554,7 @@ pub fn docs_serve(input: CommandInput) -> Result(String, Snag) {
   [
     [string.concat([rad_path, "/priv/node_modules/wonton/src/bin.js"])],
     util.relay_flags(flags),
-    ["--", path],
+    ["--", "./build/dev/docs"],
   ]
   |> list.flatten
   |> util.javascript_run(opt: [LetBeStderr, LetBeStdout])
@@ -435,86 +590,11 @@ pub fn gleam(path: List(String), input: CommandInput) -> Result(String, Snag) {
   |> result.replace_error(snag.new("task failed"))
 }
 
-/// TODO
+/// Builds help dialogues for the given [`Tasks`](#Tasks) and any subtasks.
 ///
-pub fn info() -> Result(String, Snag) {
-  let file = "gleam.toml"
-  try config =
-    file
-    |> util.toml_read_file
-    |> result.replace_error(snag.new(string.concat([
-      "failed to read `",
-      file,
-      "`",
-    ])))
-  try project =
-    config
-    |> util.toml_get(["name"])
-    |> result.replace_error(snag.new("project name not found"))
-    |> result.then(apply: function.compose(
-      dynamic.string,
-      result.replace_error(_, snag.new("project name is not a string")),
-    ))
-
-  try config = case project {
-    "rad" -> Ok(config)
-    _name -> {
-      let file = "build/packages/rad/gleam.toml"
-      file
-      |> util.toml_read_file
-      |> result.replace_error(snag.new(string.concat([
-        "failed to read `",
-        file,
-        "`",
-      ])))
-    }
-  }
-
-  try version =
-    config
-    |> util.toml_get(["version"])
-    |> result.replace_error(snag.new("rad version not found"))
-    |> result.then(apply: function.compose(
-      dynamic.string,
-      result.replace_error(_, snag.new("rad version is not a string")),
-    ))
-
-  try description =
-    config
-    |> util.toml_get(["description"])
-    |> result.replace_error(snag.new("rad description not found"))
-    |> result.then(apply: function.compose(
-      dynamic.string,
-      result.replace_error(_, snag.new("rad description is not a string")),
-    ))
-
-  [
-    string.concat([
-      "rad"
-      |> shellout.style(
-        with: shellout.display(["bold", "italic"])
-        |> map.merge(shellout.color(["pink"])),
-        custom: lookups,
-      ),
-      " ",
-      version
-      |> shellout.style(with: shellout.display(["italic"]), custom: lookups),
-    ]),
-    string.concat([
-      tab,
-      description
-      |> shellout.style(
-        with: shellout.display(["italic"])
-        |> map.merge(shellout.color(["purple"])),
-        custom: lookups,
-      ),
-    ]),
-  ]
-  |> string.join(with: "\n")
-  |> Ok
-}
-
-/// TODO
+/// Any [`Task`](#Task) with an empty `shortdoc` field, or for which no parent
+/// [`Task`](#Task) exists, is hidden from ancestor help dialogues, but can be
+/// viewed directly.
 ///
 pub fn help(
   tasks: Tasks,
@@ -548,6 +628,8 @@ pub fn help(
     ["help"] -> input.args
     _path -> path
   }
+
+  let tasks = list.flatten([tasks, tasks_from_config()])
 
   try task =
     tasks
@@ -701,6 +783,7 @@ pub fn help(
           [tab, name, tab, contents.description]
           |> string.concat
         })
+        |> list.sort(by: string.compare)
       ]
       |> string.join(with: "\n")
     }
@@ -724,6 +807,7 @@ pub fn help(
           [tab, path, tab, task.shortdoc]
           |> string.concat
         })
+        |> list.sort(string.compare)
       ]
       |> string.join(with: "\n")
     False -> ""
@@ -735,13 +819,92 @@ pub fn help(
   |> Ok
 }
 
+/// Gathers and formats information about `rad`.
+///
+pub fn info() -> Result(String, Snag) {
+  let file = "gleam.toml"
+  try config =
+    file
+    |> util.toml_read_file
+    |> result.map_error(with: fn(_nil) {
+      ["failed to read `", file, "`"]
+      |> string.concat
+      |> snag.new
+    })
+  try project =
+    config
+    |> util.toml_get(["name"])
+    |> result.replace_error(snag.new("project name not found"))
+    |> result.then(apply: function.compose(
+      dynamic.string,
+      result.replace_error(_, snag.new("project name is not a string")),
+    ))
+
+  try config = case project {
+    "rad" -> Ok(config)
+    _name -> {
+      let file = "build/packages/rad/gleam.toml"
+      file
+      |> util.toml_read_file
+      |> result.map_error(with: fn(_nil) {
+        ["failed to read `", file, "`"]
+        |> string.concat
+        |> snag.new
+      })
+    }
+  }
+
+  try version =
+    config
+    |> util.toml_get(["version"])
+    |> result.replace_error(snag.new("rad version not found"))
+    |> result.then(apply: function.compose(
+      dynamic.string,
+      result.replace_error(_, snag.new("rad version is not a string")),
+    ))
+
+  try description =
+    config
+    |> util.toml_get(["description"])
+    |> result.replace_error(snag.new("rad description not found"))
+    |> result.then(apply: function.compose(
+      dynamic.string,
+      result.replace_error(_, snag.new("rad description is not a string")),
+    ))
+
+  [
+    string.concat([
+      "rad"
+      |> shellout.style(
+        with: shellout.display(["bold", "italic"])
+        |> map.merge(shellout.color(["pink"])),
+        custom: lookups,
+      ),
+      " ",
+      version
+      |> shellout.style(with: shellout.display(["italic"]), custom: lookups),
+    ]),
+    string.concat([
+      tab,
+      description
+      |> shellout.style(
+        with: shellout.display(["italic"])
+        |> map.merge(shellout.color(["purple"])),
+        custom: lookups,
+      ),
+    ]),
+  ]
+  |> string.join(with: "\n")
+  |> Ok
+}
+
 /// TODO
 ///
 pub fn name(input: CommandInput) -> Result(String, Snag) {
   case input.args {
     [] ->
-      CommandInput(..input, args: ["name"])
-      |> config
+      ["name"]
+      |> util.toml(read: "gleam.toml", expect: dynamic.string)
     _args -> {
       try name = util.dependency(input.args)
       Ok(name)
@@ -810,8 +973,8 @@ if javascript {
     }
     case runtime {
       "elixir" | "iex" ->
-        CommandInput(..input, args: ["name"])
-        |> config
+        ["name"]
+        |> util.toml(read: "gleam.toml", expect: dynamic.string)
         |> result.then(apply: fn(name) {
           util.ebin_paths()
           |> result.replace_error(snag.new("failed to find `ebin` paths"))
@@ -909,6 +1072,19 @@ pub fn tree(_input: CommandInput) -> Result(String, Snag) {
 
 /// TODO
 ///
+pub fn user(command: List(String), input: CommandInput) -> Result(String, Snag) {
+  let [command, ..args] = command
+  shellout.command(
+    run: command,
+    with: list.flatten([args, util.relay_flags(input.flags), input.args]),
+    in: ".",
+    opt: [LetBeStderr, LetBeStdout],
+  )
+  |> result.replace_error(snag.new("task failed"))
+}
+
+/// TODO
+///
 pub fn version(input: CommandInput) -> Result(String, Snag) {
   assert Ok(flag.B(bare)) = flag.get_value(from: input.flags, for: "bare")
   try name = case bare {
@@ -920,8 +1096,8 @@ pub fn version(input: CommandInput) -> Result(String, Snag) {
   }
   case input.args {
     [] ->
-      CommandInput(..input, args: ["version"])
-      |> config
+      ["version"]
+      |> util.toml(read: "gleam.toml", expect: dynamic.string)
     path -> util.packages(path)
   }
   |> result.map(with: string.append(to: name, suffix: _))

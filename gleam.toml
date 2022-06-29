@@ -22,6 +22,7 @@ gleam_stdlib = "~> 0.22"
 glint = "~> 0.8"
 shellout = "~> 1.0"
 snag = "~> 0.2"
+thoas = "~> 0.2"
 tomerl = "~> 0.5"
 
 [dev-dependencies]
@@ -30,3 +31,16 @@ gleeunit = "~> 0.6"
 [rad]
 module = "rad"
 with = "javascript"
+
+[[rad.tasks]]
+path = ["purple", "heart"]
+run = ["echo", "💜 The dream you'll have here is a dream within a dream."]
+shortdoc = "💜 The dream you'll have here is a dream within a dream."
+
+[[rad.tasks]]
+path = ["sparkles"]
+run = ["echo", "✨ It's been a long road getting here..."]
+
+[[rad.tasks]]
+path = ["sparkling", "heart"]
+run = ["sh", "-c", "echo '💖 I was staring out the window and there it was, just fluttering there...' $(rad version)!"]

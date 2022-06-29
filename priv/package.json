@@ -1,6 +1,6 @@
 {
   "dependencies": {
     "@ltd/j-toml": "^1.30.0",
-    "wonton": "^2.1.0"
+    "wonton": "^2.2.0"
   }
 }

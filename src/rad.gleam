@@ -1,4 +1,5 @@
 import gleam/bool
+import gleam/dynamic
 import gleam/function
 import gleam/io
 import gleam/list
@@ -16,19 +17,33 @@ if erlang {
   import gleam/erlang/atom.{Atom}
 }
 
-/// TODO
+/// Runs `rad`, a flexible task runner companion for the `gleam` build manager.
+///
+/// Specify a different `module` in the `[rad]` table of your `gleam.toml`
+/// config to have `rad` run your modul's `main` function, in which you can call
+/// [`rad.do_main`](#do_main) to extend `rad` with your own tasks.
 ///
 pub fn main() -> Nil {
   case util.is_file("gleam.toml") {
     True -> {
-      let module = case util.toml(read: "gleam.toml", get: ["rad", "module"]) {
+      let module = case util.toml(
+        read: "gleam.toml",
+        get: ["rad", "module"],
+        expect: dynamic.string,
+      ) {
         Ok(module) -> module
         _ -> "rad"
       }
-      let with = case util.toml(read: "gleam.toml", get: ["rad", "with"]) {
+      let with = case util.toml(
+        read: "gleam.toml",
+        get: ["rad", "with"],
+        expect: dynamic.string,
+      ) {
         Ok(with) -> with
         _ -> "javascript"
       }
+      // Try to run any task `with` a given runtime
+      //
       assert Ok(Out(with)) =
         glint.new()
         |> glint.add_command(
@@ -65,10 +80,17 @@ pub fn main() -> Nil {
   }
 }
 
-/// TODO
+/// Applies arguments from the command line to the given
+/// [`Tasks`](rad/task.html#Tasks), then processes the output and exits.
+///
+/// You can merge `rad`'s [`task.Tasks`](rad/task.html#Tasks) with your own, or
+/// replace them entirely.
+///
+/// See [`main`](#main) for more info.
 ///
 pub fn do_main(tasks: Tasks) -> Nil {
-  tasks
+  [tasks, task.tasks_from_config()]
+  |> list.flatten
   |> list.fold(
     from: glint.new(),
     with: fn(acc, task) {

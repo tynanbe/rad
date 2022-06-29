@@ -37,8 +37,7 @@ $ wonton \
     --port=7000 \
     --tls-cert='/absolute/path/to/cert' \
     --tls-key='/absolute/path/to/private_key' \
-    -- \
-    .
+    -- .
 ```
 
 ### API

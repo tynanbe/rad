@@ -1,30 +1,31 @@
 import { options } from "../index.js";
 import fs from "fs";
+import path from "path";
 
-export const getFilePath = (request) => {
-  const { root, fallback, protocol } = options;
-  const url = new URL(request.url, `${protocol}://${request.headers.host}`);
-  const pathname = url.pathname;
+export const getFilePath = (pathname) => {
+  const { root, fallback } = options;
+  pathname = path.join(root, pathname);
 
-  if (pathname == "/") {
-    return `${root}/index.html`;
+  try {
+    if (!fs.lstatSync(pathname).isDirectory()) {
+      throw null;
+    }
+    const index = path.join(pathname, "index.html");
+    if (fs.existsSync(index)) {
+      return index;
+    }
+  } catch {}
+
+  if (fallback && !fs.existsSync(pathname) && !pathname.endsWith("/")) {
+    return path.join(root, fallback);
   }
 
-  if (
-    fallback &&
-    !fs.existsSync(`${root}${pathname}`) &&
-    !pathname.endsWith("/")
-  ) {
-    return `${root}/${fallback}`;
-  }
-
-  if (!pathname.includes(".")) {
-    const testFilepath = `${root}/${pathname}.html`;
-
-    if (fs.existsSync(testFilepath)) {
-      return testFilepath;
+  if (!path.basename(pathname).includes(".")) {
+    const maybePathname = `${pathname}.html`;
+    if (fs.existsSync(maybePathname)) {
+      return maybePathname;
     }
   }
 
-  return root + pathname;
+  return pathname;
 };

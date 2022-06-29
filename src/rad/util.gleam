@@ -1,13 +1,13 @@
-//// TODO
+//// A motley assortment of utility functions.
 ////
 
-import gleam/dynamic.{Dynamic}
+import gleam/dynamic.{DecodeError, Decoder, Dynamic}
 import gleam/float
 import gleam/function
 import gleam/http.{Header}
 import gleam/int
 import gleam/list
-import gleam/map
+import gleam/map.{Map}
 import gleam/option.{Some}
 import gleam/result
 import gleam/string
@@ -23,6 +23,7 @@ if erlang {
 }
 
 if javascript {
+  import gleam/dynamic.{DecodeErrors}
   import gleam/json
 }
 
@@ -44,6 +45,40 @@ pub fn dependency(args: List(String)) -> Result(String, Snag) {
     })
   let [name] = args
   Ok(name)
+}
+
+/// TODO
+///
+pub fn dynamic_object(
+  of key_type: Decoder(k),
+  to value_type: Decoder(v),
+) -> Decoder(Map(k, v)) {
+  do_dynamic_object(key_type, value_type)
+}
+
+if erlang {
+  fn do_dynamic_object(
+    key_type: Decoder(k),
+    value_type: Decoder(v),
+  ) -> Decoder(Map(k, v)) {
+    dynamic.map(key_type, value_type)
+  }
+}
+
+if javascript {
+  fn do_dynamic_object(
+    key_type: Decoder(k),
+    value_type: Decoder(v),
+  ) -> Decoder(Map(k, v)) {
+    fn(value) {
+      try map = decode_object(value)
+      map
+      |> dynamic.map(key_type, value_type)
+    }
+  }
+
+  external fn decode_object(Dynamic) -> Result(Dynamic, DecodeErrors) =
+    "../rad_ffi.mjs" "decode_object"
 }
 
 /// TODO
@@ -140,8 +175,28 @@ pub fn javascript_run(
 
 /// TODO
 ///
+pub fn json_encode(data: Dynamic) -> String {
+  do_json_encode(data)
+}
+
+if erlang {
+  external fn do_json_encode(Dynamic) -> String =
+    "thoas" "encode"
+}
+
+if javascript {
+  external fn do_json_encode(Dynamic) -> String =
+    "" "globalThis.JSON.stringify"
+}
+
+/// TODO
+///
 pub fn packages(path: List(String)) -> Result(String, Snag) {
-  toml(read: "build/packages/packages.toml", get: ["packages", ..path])
+  toml(
+    read: "build/packages/packages.toml",
+    get: ["packages", ..path],
+    expect: dynamic.string,
+  )
 }
 
 /// TODO
@@ -214,6 +269,14 @@ if javascript {
   }
 }
 
+/// Results in an error meant to notify users that a task cannot be carried out
+/// using the Erlang runtime.
+///
+pub fn refuse_erlang() -> Result(String, Snag) {
+  snag.error("task cannot be run with erlang")
+  |> snag.context("failed to run task")
+}
+
 /// TODO
 ///
 pub fn relay_flags(flags: flag.Map) -> List(String) {
@@ -248,12 +311,60 @@ pub fn relay_flags(flags: flag.Map) -> List(String) {
   })
 }
 
-/// Results in an error meant to notify users that a task cannot be carried out
-/// using the Erlang runtime.
+/// TODO
 ///
-pub fn refuse_erlang() -> Result(String, Snag) {
-  snag.error("task cannot be run with erlang")
-  |> snag.context("failed to run task")
+pub fn recursive_delete(path: String) -> Result(String, Snag) {
+  path
+  |> do_recursive_delete
+  |> result.replace("")
+  |> result.map_error(with: fn(_reason) {
+    ["failed to delete `", path, "`"]
+    |> string.concat
+    |> snag.new
+  })
+}
+
+if erlang {
+  fn do_recursive_delete(path: String) -> Result(Nil, file.Reason) {
+    file.recursive_delete(path)
+  }
+}
+
+if javascript {
+  external fn do_recursive_delete(String) -> Result(Nil, String) =
+    "../rad_ffi.mjs" "recursive_delete"
+}
+
+/// TODO
+///
+pub fn rename(from source: String, to dest: String) -> Result(String, Snag) {
+  source
+  |> do_rename(dest)
+  |> result.replace("")
+  |> result.map_error(with: fn(_reason) {
+    ["failed to rename `", source, "` to `", dest, "`"]
+    |> string.concat
+    |> snag.new
+  })
+}
+
+if erlang {
+  fn do_rename(source: String, dest: String) -> Result(Nil, file.Reason) {
+    source
+    |> erlang_rename(dest)
+    |> posix_result
+  }
+
+  external fn erlang_rename(String, String) -> Dynamic =
+    "file" "rename"
+
+  external fn posix_result(Dynamic) -> Result(Nil, file.Reason) =
+    "gleam_erlang_ffi" "posix_result"
+}
+
+if javascript {
+  external fn do_rename(String, String) -> Result(Nil, String) =
+    "../rad_ffi.mjs" "rename"
 }
 
 /// Filters the style flags from a `glint.CommandInput.flags` record and
@@ -280,22 +391,46 @@ pub fn style_flags(flags: flag.Map) -> StyleFlags {
 pub fn toml(
   read file: String,
   get key_path: List(String),
-) -> Result(String, Snag) {
+  expect decoder: Decoder(any),
+) -> Result(any, Snag) {
   case key_path == [] {
     False ->
       toml_read_file(file)
-      |> result.replace_error(snag.new(string.concat([
-        "failed to read `",
-        file,
-        "`",
-      ])))
+      |> result.map_error(with: fn(_reason) {
+        ["failed to read `", file, "`"]
+        |> string.concat
+        |> snag.new
+      })
       |> result.then(apply: function.compose(
         toml_get(_, key_path),
         result.replace_error(_, snag.new("key not found")),
       ))
       |> result.then(apply: function.compose(
-        dynamic.string,
-        result.replace_error(_, snag.new("value is not a string")),
+        decoder,
+        result.map_error(_, with: fn(decode_errors) {
+          let [head, ..rest] =
+            decode_errors
+            |> list.map(with: fn(error: DecodeError) {
+              string.concat([
+                "expected ",
+                error.expected,
+                " but found ",
+                error.found,
+                case error.path == [] {
+                  True -> ""
+                  False ->
+                    string.concat([
+                      " at `",
+                      string.join(error.path, with: "."),
+                      "`",
+                    ])
+                },
+              ])
+            })
+          rest
+          |> list.fold(from: snag.new(head), with: snag.layer)
+          |> snag.layer("failed to decode toml value")
+        }),
       ))
     True -> snag.error("key path not provided")
   }
@@ -375,7 +510,6 @@ pub fn which_rad() -> String {
 ///
 pub fn working_directory() -> Result(String, Snag) {
   do_working_directory()
-  // TODO: unify erlang and js file.reason errors instead of uninformative snag?
   |> result.replace_error(snag.new("failed to get current working directory"))
 }
 

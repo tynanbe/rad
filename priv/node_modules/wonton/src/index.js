@@ -6,8 +6,10 @@ import {
   injectContent,
   log,
   mimeType,
+  redirect,
   setRoot,
   show404,
+  showDirectory,
   showError,
   showFile,
 } from "./utils/index.js";
@@ -51,7 +53,26 @@ export const start = (startOptions = {}) => {
         return handleEvent(request, response);
       }
 
-      const filePath = getFilePath(request);
+      const url = new URL(
+        request.url,
+        `${options.protocol}://${request.headers.host}`,
+      );
+      const pathname = url.pathname;
+
+      try {
+        const lstat = fs.lstatSync(path.join(options.root, pathname));
+        if (lstat.isDirectory() && !pathname.endsWith("/")) {
+          return redirect(response, 301, `${pathname}/`);
+        }
+      } catch {}
+
+      const filePath = getFilePath(pathname);
+
+      try {
+        const contents = fs.readdirSync(filePath);
+        return showDirectory(response, pathname, contents);
+      } catch {}
+
       const extension = path.extname(filePath).toLowerCase().slice(1);
       const contentType = mimeType(extension) || "application/octet-stream";
       const isHtml = contentType == "text/html";
@@ -69,11 +90,11 @@ export const start = (startOptions = {}) => {
             return showError(response, error);
           }
 
-          if (live && isHtml) {
-            content = injectContent(content);
-          }
-
-          return showFile(response, content, contentType);
+          return showFile(
+            response,
+            live && isHtml ? injectContent(content) : content,
+            contentType,
+          );
         },
       );
     },

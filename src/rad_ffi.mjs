@@ -1,4 +1,10 @@
 import { Error, Ok, toList } from "./gleam.mjs";
+import {
+  classify_dynamic,
+  map_insert,
+  new_map,
+} from "../../gleam_stdlib/dist/gleam_stdlib.mjs";
+import { DecodeError } from "../../gleam_stdlib/dist/gleam/dynamic.mjs";
 import * as TOML from "../priv/node_modules/@ltd/j-toml/index.mjs";
 import * as fs from "fs";
 import * as path from "path";
@@ -6,6 +12,24 @@ import * as path from "path";
 const prefix = "./build/dev/javascript";
 const ok_signals = [...Array(3)].map((_, i) => i + 385);
 const Nil = undefined;
+
+export function decode_object(data) {
+  if (typeof data === "object" && !Array.isArray(data) && null !== data) {
+    try {
+      let map = Object.keys(data).reduce(
+        (acc, key) => map_insert(key, data[key], acc),
+        new_map(),
+      );
+      return new Ok(map);
+    } catch {}
+  }
+  let decode_error = new DecodeError(
+    "Object",
+    classify_dynamic(data),
+    toList([]),
+  );
+  return new Error(toList([decode_error]));
+}
 
 export function ebin_paths() {
   let prefix = "./build/dev/erlang";
@@ -103,6 +127,24 @@ export function load_modules() {
         ),
     );
   return Nil;
+}
+
+export function recursive_delete(pathname) {
+  try {
+    fs.rmSync(pathname, { force: true, recursive: true });
+    return new Ok(Nil);
+  } catch (err) {
+    return new Error(err.code);
+  }
+}
+
+export function rename(source, dest) {
+  try {
+    fs.renameSync(source, dest);
+    return new Ok(Nil);
+  } catch (err) {
+    return new Error(err.code);
+  }
 }
 
 export function toml_get(parsed, key_path) {
