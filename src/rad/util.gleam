@@ -1,11 +1,12 @@
 //// A motley assortment of utility functions.
 ////
 
-import gleam/dynamic.{DecodeError, Decoder, Dynamic}
+import gleam/dynamic.{DecodeError, DecodeErrors, Decoder, Dynamic}
 import gleam/float
 import gleam/function
 import gleam/http.{Header}
 import gleam/int
+import gleam/io
 import gleam/list
 import gleam/map.{Map}
 import gleam/option.{Some}
@@ -23,7 +24,7 @@ if erlang {
 }
 
 if javascript {
-  import gleam/dynamic.{DecodeErrors}
+  import gleam/dynamic
   import gleam/json
 }
 
@@ -49,15 +50,12 @@ pub fn dependency(args: List(String)) -> Result(String, Snag) {
 
 /// TODO
 ///
-pub fn dynamic_object(
-  of key_type: Decoder(k),
-  to value_type: Decoder(v),
-) -> Decoder(Map(k, v)) {
-  do_dynamic_object(key_type, value_type)
+pub fn dynamic_table(of value_type: Decoder(v)) -> Decoder(Map(String, v)) {
+  do_dynamic_table(dynamic.string, value_type)
 }
 
 if erlang {
-  fn do_dynamic_object(
+  fn do_dynamic_table(
     key_type: Decoder(k),
     value_type: Decoder(v),
   ) -> Decoder(Map(k, v)) {
@@ -66,7 +64,7 @@ if erlang {
 }
 
 if javascript {
-  fn do_dynamic_object(
+  fn do_dynamic_table(
     key_type: Decoder(k),
     value_type: Decoder(v),
   ) -> Decoder(Map(k, v)) {
@@ -388,6 +386,31 @@ pub fn style_flags(flags: flag.Map) -> StyleFlags {
 
 /// TODO
 ///
+pub type Table =
+  Map(String, Dynamic)
+
+/// TODO
+///
+pub type Tables =
+  List(Table)
+
+/// TODO
+///
+pub fn table_item(
+  from table: Table,
+  get key: String,
+  expect decoder: Decoder(any),
+) -> Result(any, DecodeErrors) {
+  table
+  |> map.get(key)
+  |> result.replace_error([
+    DecodeError(expected: "any", found: "nothing", path: [key]),
+  ])
+  |> result.then(apply: decoder)
+}
+
+/// TODO
+///
 pub fn toml(
   read file: String,
   get key_path: List(String),
@@ -481,6 +504,63 @@ if erlang {
 if javascript {
   external fn do_toml_read_file(String) -> Result(Dynamic, Nil) =
     "../rad_ffi.mjs" "toml_read_file"
+}
+
+/// TODO
+///
+pub fn toml_tables(
+  read file: String,
+  get path: List(String),
+  require keys: List(String),
+  include items: List(#(String, Dynamic)),
+) -> Result(Tables, Snag) {
+  let defaults = map.from_list(items)
+
+  file
+  |> toml(
+    get: path,
+    expect: dynamic.list(of: dynamic_table(of: dynamic.dynamic)),
+  )
+  |> result.map(with: list.map(_, with: fn(table) {
+    let table =
+      table
+      |> map.merge(into: defaults)
+    // Check for required keys
+    //
+    keys
+    |> list.filter_map(with: fn(key) {
+      case map.has_key(table, key) {
+        True -> Error(Nil)
+        False ->
+          [
+            "expected item with key `",
+            key,
+            "` in table `[[",
+            path
+            |> string.join(with: "."),
+            "]]`",
+          ]
+          |> string.concat
+          |> Ok
+      }
+    })
+    |> fn(errors) {
+      case errors == [] {
+        True -> Nil
+        False -> {
+          // Exit if any required key is missing
+          //
+          ["required item(s) not found in `", file, "`"]
+          |> string.concat
+          |> Snag(cause: errors)
+          |> snag.pretty_print
+          |> io.print
+          shellout.exit(1)
+        }
+      }
+    }
+    table
+  }))
 }
 
 /// TODO

@@ -32,6 +32,11 @@ gleeunit = "~> 0.6"
 module = "rad"
 with = "javascript"
 
+[[rad.formatters]]
+name = "javascript"
+check = ["rome", "ci", "--indent-style=space", "src", "test"]
+run = ["rome", "format", "--indent-style=space", "--write", "src", "test"]
+
 [[rad.tasks]]
 path = ["purple", "heart"]
 run = ["echo", "💜 The dream you'll have here is a dream within a dream."]

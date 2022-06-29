@@ -63,10 +63,10 @@ const tab = "    "
 
 /// TODO
 ///
-pub type Task(a) {
+pub type Task(any) {
   Task(
     path: List(String),
-    run: fn(CommandInput) -> a,
+    run: fn(CommandInput) -> any,
     flags: List(Flag),
     shortdoc: String,
     parameters: List(#(String, String)),
@@ -261,7 +261,6 @@ pub fn tasks() -> Tasks {
     Task(
       path: ["format"],
       run: format,
-      //flags: [flag.bool("check", False), flag.bool("stdin", False)],
       flags: [
         flag.bool(
           called: "check",
@@ -355,51 +354,28 @@ pub fn tasks() -> Tasks {
 /// TODO
 ///
 pub fn tasks_from_config() -> Tasks {
-  let list_string = fn(key) {
-    let snag =
-      ["expected `", key, "` in `[[rad.tasks]]` of type `List(String)`"]
-      |> string.concat
-      |> snag.new
-    function.compose(
-      dynamic.field(key, dynamic.list(dynamic.string)),
-      result.replace_error(_, snag),
-    )
-  }
   assert Ok(tasks) =
-    util.toml(
+    util.toml_tables(
       read: "gleam.toml",
       get: ["rad", "tasks"],
-      expect: dynamic.shallow_list,
+      require: ["path", "run"],
+      include: [#("shortdoc", dynamic.from(""))],
     )
-    |> result.map(with: list.map(_, with: fn(item) {
-      // Require `path` and `run` for every task
-      //
-      let path =
-        item
-        |> list_string("path")
-      let run =
-        item
-        |> list_string("run")
-      let #(path, run) = case path, run {
-        Ok(path), Ok(run) -> #(path, run)
-        _path, _run -> {
-          case path, run {
-            Error(path), Ok(_run) -> [path.issue]
-            Ok(_path), Error(run) -> [run.issue]
-            Error(path), Error(run) -> [path.issue, run.issue]
-          }
-          |> Snag(issue: "malformed task in `gleam.toml`")
-          |> snag.pretty_print
-          |> io.print
-          shellout.exit(1)
-          #([], [])
-        }
-      }
-      let shortdoc = case item
-      |> dynamic.field("shortdoc", dynamic.string) {
-        Ok(shortdoc) -> shortdoc
-        Error(_decode_error) -> ""
-      }
+    |> result.map(with: list.map(_, with: fn(task) {
+      assert Ok(path) =
+        util.table_item(
+          from: task,
+          get: "path",
+          expect: dynamic.list(of: dynamic.string),
+        )
+      assert Ok(run) =
+        util.table_item(
+          from: task,
+          get: "run",
+          expect: dynamic.list(of: dynamic.string),
+        )
+      assert Ok(shortdoc) =
+        util.table_item(from: task, get: "shortdoc", expect: dynamic.string)
       Task(
         path: path,
         run: user(run, _),
@@ -465,7 +441,7 @@ pub fn docs_build(input: CommandInput) -> Result(String, Snag) {
         |> list.map(with: util.toml(
           read: "gleam.toml",
           get: _,
-          expect: util.dynamic_object(dynamic.string, dynamic.string),
+          expect: util.dynamic_table(of: dynamic.string),
         ))
         |> result.values
         |> list.map(with: map.keys)
@@ -563,21 +539,99 @@ pub fn docs_serve(input: CommandInput) -> Result(String, Snag) {
 
 /// TODO
 ///
+pub type Formatter {
+  Formatter(name: String, check: List(String), run: List(String))
+}
+
+/// TODO
+///
 pub fn format(input: CommandInput) -> Result(String, Snag) {
-  // TODO run all regardless of errors, layer snags
-  gleam(["format"], input)
-  |> result.then(apply: fn(_output) {
-    shellout.command(// TODO config override commands
-      // TODO rome
-      run: string.concat([rad_path, "/priv/node_modules/.bin/prettier"]), with: list.flatten([
-        ["--config", string.concat([rad_path, "/priv/.prettierrc.toml"])],
-        ["--no-error-on-unmatched-pattern"],
-        // TODO
-        //"--check",
-        ["src"],
-      ]), in: ".", opt: [LetBeStderr, LetBeStdout])
-    |> result.replace_error(snag.new("javascript formatting issue"))
+  let formatters = [
+    Formatter(
+      name: "gleam",
+      check: ["gleam", "format", "--check"],
+      run: ["gleam", "format"],
+    ),
+    ..formatters_from_config()
+  ]
+
+  assert Ok(flag.B(check)) = flag.get_value(from: input.flags, for: "check")
+
+  let #(action, extra, failure) = case check {
+    False -> #(" Formatting", "", "formatting")
+    True -> #("   Checking", " formatting", "format check")
+  }
+
+  formatters
+  |> list.filter_map(with: fn(formatter) {
+    [
+      action
+      |> shellout.style(with: shellout.color(["magenta"]), custom: lookups),
+      " ",
+      formatter.name,
+      extra,
+      "...",
+    ]
+    |> string.concat
+    |> io.println
+    let command = case check {
+      True -> formatter.check
+      False -> formatter.run
+    }
+    let result =
+      CommandInput(..input, flags: map.new())
+      |> user(command, _)
+      |> result.map_error(with: fn(_snag) {
+        string.concat(["`", formatter.name, "` formatter failed"])
+      })
+    case result {
+      Ok(_empty) -> Error(Nil)
+      Error(message) -> Ok(message)
+    }
   })
+  |> fn(errors) {
+    case errors == [] {
+      True -> Ok("")
+      False -> {
+        io.println("")
+        [failure, " failed"]
+        |> string.concat
+        |> Snag(cause: errors)
+        |> Error
+      }
+    }
+  }
+}
+
+/// TODO
+///
+pub fn formatters_from_config() -> List(Formatter) {
+  assert Ok(formatters) =
+    util.toml_tables(
+      read: "gleam.toml",
+      get: ["rad", "formatters"],
+      require: ["name", "check", "run"],
+      include: [],
+    )
+    |> result.map(with: list.map(_, with: fn(formatter) {
+      assert Ok(name) =
+        util.table_item(from: formatter, get: "name", expect: dynamic.string)
+      assert Ok(check) =
+        util.table_item(
+          from: formatter,
+          get: "check",
+          expect: dynamic.list(of: dynamic.string),
+        )
+      assert Ok(run) =
+        util.table_item(
+          from: formatter,
+          get: "run",
+          expect: dynamic.list(of: dynamic.string),
+        )
+      Formatter(name: name, check: check, run: run)
+    }))
+    |> result.or(Ok([]))
+  formatters
 }
 
 /// TODO
