@@ -1,9 +1,5 @@
 import { Error, Ok, toList } from "./gleam.mjs";
-import {
-  classify_dynamic,
-  map_insert,
-  new_map,
-} from "../../gleam_stdlib/dist/gleam_stdlib.mjs";
+import { classify_dynamic } from "../../gleam_stdlib/dist/gleam_stdlib.mjs";
 import { DecodeError } from "../../gleam_stdlib/dist/gleam/dynamic.mjs";
 import * as TOML from "../priv/node_modules/@ltd/j-toml/index.mjs";
 import * as fs from "fs";
@@ -15,13 +11,7 @@ const Nil = undefined;
 
 export function decode_object(data) {
   if (typeof data === "object" && !Array.isArray(data) && null !== data) {
-    try {
-      let map = Object.keys(data).reduce(
-        (acc, key) => map_insert(key, data[key], acc),
-        new_map(),
-      );
-      return new Ok(map);
-    } catch {}
+    return new Ok(data);
   }
   let decode_error = new DecodeError(
     "Object",
@@ -97,7 +87,7 @@ function do_mjs_paths(prefix) {
   return (
     fs
       .readdirSync(prefix, { withFileTypes: true })
-      .filter((item) => item.name !== "gleam.mjs")
+      .filter((item) => "gleam.mjs" !== item.name)
       .map((item) => {
         let path = `${prefix}/${item.name}`;
         return item.isDirectory() ? do_mjs_paths(path) : path;
@@ -147,11 +137,31 @@ export function rename(source, dest) {
   }
 }
 
+export function toml_decode_every(toml, key_path, decoder) {
+  let result = toml_get(toml, key_path);
+  if (!result.isOk()) {
+    let decode_error = new DecodeError(
+      "Toml",
+      classify_dynamic(data),
+      toList(key_path),
+    );
+    return new Error(toList([decode_error]));
+  }
+  toml = result[0];
+  let items = Object.keys(toml)
+    .map((key) => {
+      let result = decoder(toml[key]);
+      return [key, result.isOk() ? result[0] : Nil];
+    },)
+    .filter(([_key, value]) => Nil !== value);
+  return new Ok(toList(items));
+}
+
 export function toml_get(parsed, key_path) {
   let result = new Ok(parsed);
   for (let key of key_path) {
     let value = result[0][key];
-    if (value !== Nil) {
+    if (Nil !== value) {
       result = new Ok(value);
     } else {
       // TODO: improve this?

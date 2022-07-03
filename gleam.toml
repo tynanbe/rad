@@ -30,6 +30,7 @@ gleeunit = "~> 0.6"
 
 [rad]
 module = "rad"
+targets = ["erlang", "javascript"]
 with = "javascript"
 
 [[rad.formatters]]

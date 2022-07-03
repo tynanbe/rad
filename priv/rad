@@ -1,11 +1,11 @@
-#!/bin/sh -e
+#!/usr/bin/env -S sh -e
 
 self="rad"
 module="./build/dev/javascript/${self}/dist/${self}.mjs"
 
 fail() {
   message="${1}"
-  echo -e "\e[91m${message}\e[0m" 1>&2
+  echo "\033[91m${message}\033[0m" 1>&2
   exit 1
 }
 
@@ -19,7 +19,12 @@ for dependency in "gleam" "node"; do
   fi
 done
 if test -n "${snag}"; then
-  fail "$snag"
+  fail "${snag}"
+fi
+
+config="gleam.toml"
+if ! test -f "./${config}"; then
+  fail "error: \`${config}\` not found; \`${self}\` must be invoked from a Gleam project's base directory"
 fi
 
 # Compile if necessary.

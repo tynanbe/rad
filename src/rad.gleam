@@ -8,6 +8,7 @@ import gleam/string
 import glint.{Help, Out}
 import glint/flag
 import rad/task.{Tasks}
+import rad/toml
 import rad/util
 import shellout.{LetBeStderr, LetBeStdout}
 import snag.{Snag}
@@ -20,64 +21,47 @@ if erlang {
 /// Runs `rad`, a flexible task runner companion for the `gleam` build manager.
 ///
 /// Specify a different `module` in the `[rad]` table of your `gleam.toml`
-/// config to have `rad` run your modul's `main` function, in which you can call
-/// [`rad.do_main`](#do_main) to extend `rad` with your own tasks.
+/// config to have `rad` run your module's `main` function, in which you can
+/// call [`rad.do_main`](#do_main) to extend `rad` with your own tasks.
 ///
 pub fn main() -> Nil {
-  case util.is_file("gleam.toml") {
-    True -> {
-      let module = case util.toml(
-        read: "gleam.toml",
-        get: ["rad", "module"],
-        expect: dynamic.string,
-      ) {
-        Ok(module) -> module
-        _ -> "rad"
+  let toml =
+    "gleam.toml"
+    |> toml.parse_file
+    |> result.lazy_unwrap(or: toml.new)
+  let module =
+    ["rad", "module"]
+    |> toml.decode(from: toml, expect: dynamic.string)
+    |> result.unwrap(or: "rad")
+  let with =
+    ["rad", "with"]
+    |> toml.decode(from: toml, expect: dynamic.string)
+    |> result.unwrap(or: "javascript")
+  // Try to run any task `with` a given runtime
+  assert Ok(Out(with)) =
+    glint.new()
+    |> glint.add_command(
+      at: [],
+      do: fn(input) {
+        assert Ok(flag.S(with)) =
+          "with"
+          |> flag.get_value(from: input.flags)
+        with
+      },
+      with: [flag.string(called: "with", default: with, explained: "")],
+      described: "",
+      used: "",
+    )
+    |> glint.execute(arguments(True))
+  rad_run(
+    with,
+    fn() {
+      case module {
+        "rad" -> do_main(task.tasks())
+        _else -> gleam_run(module)
       }
-      let with = case util.toml(
-        read: "gleam.toml",
-        get: ["rad", "with"],
-        expect: dynamic.string,
-      ) {
-        Ok(with) -> with
-        _ -> "javascript"
-      }
-      // Try to run any task `with` a given runtime
-      //
-      assert Ok(Out(with)) =
-        glint.new()
-        |> glint.add_command(
-          at: [],
-          do: fn(input) {
-            assert Ok(flag.S(with)) =
-              flag.get_value(from: input.flags, for: "with")
-            with
-          },
-          with: [flag.string(called: "with", default: with, explained: "")],
-          described: "",
-          used: "",
-        )
-        |> glint.execute(arguments(True))
-      rad_run(
-        with,
-        fn() {
-          case module {
-            "rad" -> do_main(task.tasks())
-            _ -> gleam_run(module)
-          }
-        },
-      )
-    }
-
-    False -> {
-      snag.new(
-        "`gleam.toml` not found; `rad` must be invoked from a Gleam project's base directory",
-      )
-      |> snag.pretty_print
-      |> io.print
-      shellout.exit(1)
-    }
-  }
+    },
+  )
 }
 
 /// Applies arguments from the command line to the given
@@ -89,7 +73,18 @@ pub fn main() -> Nil {
 /// See [`main`](#main) for more info.
 ///
 pub fn do_main(tasks: Tasks) -> Nil {
-  [tasks, task.tasks_from_config()]
+  [
+    tasks,
+    task.tasks_from_config()
+    |> list.map(with: result.map_error(_, with: fn(snag) {
+      Snag(..snag, issue: "invalid `[[rad.tasks]]` in `gleam.toml`")
+      |> snag.pretty_print
+      |> string.trim
+      |> string.append(suffix: "\n")
+      |> io.println
+    }))
+    |> result.values,
+  ]
   |> list.flatten
   |> list.fold(
     from: glint.new(),
@@ -122,16 +117,20 @@ fn arguments(init: Bool) -> List(String) {
   shellout.arguments()
   |> list.filter(for: case init {
     True -> filter
-    False -> function.compose(filter, bool.negate)
+    False ->
+      filter
+      |> function.compose(bool.negate)
   })
 }
 
 fn end_task(result: Result(String, Snag)) -> Nil {
   case result {
     Ok(output) -> {
-      case output == "" || string.ends_with(output, "\n") {
-        True -> output
-        False -> string.concat([output, "\n"])
+      case output {
+        "" -> output
+        _else ->
+          [string.trim(output), "\n"]
+          |> string.concat
       }
       |> io.print
       shellout.exit(0)
@@ -176,7 +175,7 @@ if erlang {
   fn do_is_running(target: String) -> Bool {
     case target {
       "erlang" -> True
-      _ -> False
+      _else -> False
     }
   }
 }
@@ -185,39 +184,38 @@ if javascript {
   fn do_is_running(target: String) -> Bool {
     case target {
       "javascript" -> True
-      _ -> False
+      _else -> False
     }
   }
 }
 
 fn rad_run(with: String, fun: fn() -> Nil) -> Nil {
   case is_running(with), with {
-    True, _ -> fun()
+    True, _any -> fun()
 
-    _, "erlang" ->
-      case util.is_file("./build/dev/erlang/rad/ebin/rad.app") {
-        False ->
-          shellout.command(
-            run: "gleam",
-            with: ["build", "--target=erlang"],
-            in: ".",
-            opt: [LetBeStderr, LetBeStdout],
-          )
-          |> result.replace_error(snag.new("failed to run task"))
-        True -> Ok("")
-      }
-      |> result.then(apply: fn(_) {
+    _else_if, "erlang" ->
+      {
+        let options = [LetBeStderr, LetBeStdout]
+        try _output = case util.is_file("./build/dev/erlang/rad/ebin/rad.app") {
+          True -> Ok("")
+          False ->
+            // Build `rad` for Erlang
+            ["build", "--target=erlang"]
+            |> shellout.command(run: "gleam", in: ".", opt: options)
+            |> result.replace_error(snag.new("failed to run task"))
+        }
+        // Run `rad` with Erlang
         [
           ["-noshell"],
           ["-eval", "gleam@@main:run(rad)"],
           ["-extra", ..shellout.arguments()],
         ]
         |> list.flatten
-        |> util.erlang_run(opt: [LetBeStderr, LetBeStdout])
-      })
+        |> util.erlang_run(opt: options)
+      }
       |> end_task
 
-    _, "javascript" ->
+    _else_if, "javascript" ->
       [
         ["--title=rad"],
         [
@@ -229,7 +227,7 @@ fn rad_run(with: String, fun: fn() -> Nil) -> Nil {
       |> util.javascript_run(opt: [LetBeStderr, LetBeStdout])
       |> end_task
 
-    _, _ ->
+    _else, _any ->
       ["unknown target `", with, "`"]
       |> string.concat
       |> snag.error

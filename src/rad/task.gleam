@@ -4,19 +4,17 @@ import gleam/int
 import gleam/io
 import gleam/list
 import gleam/map
-import gleam/option.{None, Some}
+import gleam/option.{None, Option, Some}
+import gleam/order.{Order}
 import gleam/pair
 import gleam/result
 import gleam/string
 import glint.{CommandInput}
 import glint/flag.{Flag}
+import rad/toml
 import rad/util.{rad_path}
-import shellout.{LetBeStderr, LetBeStdout, Lookups}
+import shellout.{LetBeStderr, LetBeStdout, Lookups, StyleFlags}
 import snag.{Snag}
-
-/// TODO
-///
-pub const have_version = ["gleam.toml", "README.md"]
 
 /// TODO
 ///
@@ -75,8 +73,13 @@ pub type Task(any) {
 
 /// TODO
 ///
+pub type TaskResult =
+  Result(String, Snag)
+
+/// TODO
+///
 pub type Tasks =
-  List(Task(Result(String, Snag)))
+  List(Task(TaskResult))
 
 /// TODO
 ///
@@ -99,20 +102,20 @@ pub fn tasks() -> Tasks {
     ),
   ]
 
-  let target = case util.toml(
-    read: "gleam.toml",
-    get: ["target"],
-    expect: dynamic.string,
-  ) {
-    Ok(target) -> target
-    Error(_message) -> "erlang"
-  }
+  let toml =
+    "gleam.toml"
+    |> toml.parse_file
+    |> result.lazy_unwrap(or: toml.new)
   let target_flags = [
-    flag.string(
-      called: "target",
-      default: target,
-      explained: "The platform to target",
-    ),
+    ["rad", "targets"]
+    |> toml.decode(from: toml, expect: dynamic.list(of: dynamic.string))
+    |> result.lazy_or(fn() {
+      ["target"]
+      |> toml.decode(from: toml, expect: dynamic.string)
+      |> result.map(with: fn(target) { [target] })
+    })
+    |> result.unwrap(or: ["erlang"])
+    |> flag.strings(called: "target", explained: "The platform(s) to target"),
   ]
 
   let docs_flags = [
@@ -166,7 +169,7 @@ pub fn tasks() -> Tasks {
     ),
     Task(
       path: ["build"],
-      run: gleam(["build"], _),
+      run: multitarget(gleam(["build"], _), _),
       flags: [
         flag.bool(
           called: "warnings-as-errors",
@@ -308,7 +311,7 @@ pub fn tasks() -> Tasks {
     ),
     Task(
       path: ["test"],
-      run: gleam(["test"], _),
+      run: multitarget(gleam(["test"], _), _),
       flags: target_flags,
       shortdoc: "Run the project tests",
       parameters: [],
@@ -353,29 +356,13 @@ pub fn tasks() -> Tasks {
 
 /// TODO
 ///
-pub fn tasks_from_config() -> Tasks {
-  assert Ok(tasks) =
-    util.toml_tables(
-      read: "gleam.toml",
-      get: ["rad", "tasks"],
-      require: ["path", "run"],
-      include: [#("shortdoc", dynamic.from(""))],
-    )
-    |> result.map(with: list.map(_, with: fn(task) {
-      assert Ok(path) =
-        util.table_item(
-          from: task,
-          get: "path",
-          expect: dynamic.list(of: dynamic.string),
-        )
-      assert Ok(run) =
-        util.table_item(
-          from: task,
-          get: "run",
-          expect: dynamic.list(of: dynamic.string),
-        )
-      assert Ok(shortdoc) =
-        util.table_item(from: task, get: "shortdoc", expect: dynamic.string)
+pub fn tasks_from_config() -> List(Result(Task(TaskResult), Snag)) {
+  let shortdoc = ""
+  let dynamic_strings = fn(name) {
+    dynamic.field(named: name, of: dynamic.list(of: dynamic.string))
+  }
+  let requirements =
+    fn(path, run) {
       Task(
         path: path,
         run: user(run, _),
@@ -383,9 +370,28 @@ pub fn tasks_from_config() -> Tasks {
         shortdoc: shortdoc,
         parameters: [],
       )
-    }))
-    |> result.or(Ok([]))
-  tasks
+    }
+    |> dynamic.decode2(dynamic_strings("path"), dynamic_strings("run"))
+
+  "gleam.toml"
+  |> toml.parse_file
+  |> result.lazy_unwrap(or: toml.new)
+  |> toml.decode(
+    get: ["rad", "tasks"],
+    expect: dynamic.list(of: toml.from_dynamic),
+  )
+  |> result.unwrap(or: [])
+  |> list.map(with: fn(toml) {
+    try task =
+      []
+      |> toml.decode(from: toml, expect: requirements)
+    let shortdoc =
+      ["shortdoc"]
+      |> toml.decode(from: toml, expect: dynamic.string)
+      |> result.unwrap(or: shortdoc)
+    Task(..task, shortdoc: shortdoc)
+    |> Ok
+  })
 }
 
 /// Sort [`Tasks`](#Tasks) alphabetically by `path`.
@@ -402,9 +408,9 @@ pub fn sort_tasks(tasks: Tasks) -> Tasks {
 
 fn remove_common_path(a: List(String), b: List(String)) -> #(String, String) {
   let nonempty = fn(strings) {
-    case strings == [] {
-      False -> strings
-      True -> [""]
+    case strings {
+      [] -> [""]
+      _else -> strings
     }
   }
   let [head_a, ..a] = nonempty(a)
@@ -417,66 +423,76 @@ fn remove_common_path(a: List(String), b: List(String)) -> #(String, String) {
 
 /// TODO
 ///
-pub fn config(input: CommandInput) -> Result(String, Snag) {
-  util.toml(read: "gleam.toml", get: input.args, expect: dynamic.dynamic)
-  |> result.map(with: util.json_encode)
+pub fn config(input: CommandInput) -> TaskResult {
+  try toml =
+    "gleam.toml"
+    |> toml.parse_file
+
+  input.args
+  |> toml.decode(from: toml, expect: dynamic.dynamic)
+  |> result.map(with: toml.encode_json)
 }
 
 /// TODO
+/// TODO: split out `do_docs_build`, wrap in `multitask`
 ///
-pub fn docs_build(input: CommandInput) -> Result(String, Snag) {
-  assert Ok(flag.B(all)) = flag.get_value(from: input.flags, for: "all")
+pub fn docs_build(input: CommandInput) -> TaskResult {
+  assert Ok(flag.B(all)) =
+    "all"
+    |> flag.get_value(from: input.flags)
   let input = case all {
-    False -> input
     True -> {
       // Prepare to build documentation for all Gleam dependencies
-      //
-      let flags =
-        False
-        |> flag.B
-        |> flag.Contents(description: "")
-        |> map.insert(into: input.flags, for: "all")
-      let input =
-        [["dependencies"], ["dev-dependencies"]]
-        |> list.map(with: util.toml(
-          read: "gleam.toml",
-          get: _,
-          expect: util.dynamic_table(of: dynamic.string),
-        ))
-        |> result.values
-        |> list.map(with: map.keys)
-        |> list.flatten
-        |> list.unique
-        |> list.filter(for: fn(name) {
-          ["./build/packages/", name, "/gleam.toml"]
-          |> string.concat
-          |> util.is_file
-        })
-        |> CommandInput(flags: flags)
-      case input.args == [] {
-        False -> {
-          // Build documentation for the base project
-          //
-          []
-          |> CommandInput(flags: flags)
-          |> docs_build
-          io.println("")
+      assert Ok(flags) =
+        "--all=false"
+        |> flag.update_flags(in: input.flags)
+      let toml =
+        "gleam.toml"
+        |> toml.parse_file
+        |> result.lazy_unwrap(or: toml.new)
+      let dependencies =
+        ["dependencies"]
+        |> toml.decode_every(from: toml, expect: dynamic.string)
+        |> result.unwrap(or: [])
+      let dev_dependencies =
+        ["dev-dependencies"]
+        |> toml.decode_every(from: toml, expect: dynamic.string)
+        |> result.unwrap(or: [])
+      [dependencies, dev_dependencies]
+      |> list.flatten
+      |> list.map(with: pair.first)
+      |> list.unique
+      |> list.filter(for: fn(name) { // Gleam packages only
+        //
+        ["./build/packages/", name, "/gleam.toml"]
+        |> string.concat
+        |> util.is_file })
+      |> function.tap(fn(dependencies) {
+        case dependencies {
+          [] -> Nil
+          _else -> {
+            // Build documentation for the base project too
+            []
+            |> CommandInput(flags: flags)
+            |> docs_build
+            io.println("")
+          }
         }
-        True -> Nil
-      }
-      input
+      })
+      |> CommandInput(flags: flags)
     }
+    False -> input
   }
   let args = input.args
   let extra_args = case args {
     [_, ..args] if args != [] -> Some(args)
-    _args -> None
+    _else -> None
   }
   try #(name, path) = case extra_args {
     None if args == [] ->
       #("", ".")
       |> Ok
-    _args ->
+    _else ->
       args
       |> list.take(up_to: 1)
       |> util.dependency
@@ -495,8 +511,10 @@ pub fn docs_build(input: CommandInput) -> Result(String, Snag) {
     |> result.then(apply: fn(_output) {
       case path {
         "." -> Ok("")
-        _path -> {
-          let new_path = string.concat(["./build/dev/docs/", name])
+        _else -> {
+          let new_path =
+            ["./build/dev/docs/", name]
+            |> string.concat
           try _result = util.recursive_delete(new_path)
           [path, "/build/dev/docs/", name]
           |> string.concat
@@ -516,19 +534,26 @@ pub fn docs_build(input: CommandInput) -> Result(String, Snag) {
 
 /// TODO
 ///
-pub fn docs_serve(input: CommandInput) -> Result(String, Snag) {
+pub fn docs_serve(input: CommandInput) -> TaskResult {
   try _output = docs_build(input)
 
   io.println("")
 
-  assert Ok(flag.S(host)) = flag.get_value(from: input.flags, for: "host")
-  assert Ok(flags) = case host == "localhost" {
-    True -> flag.update_flags(in: input.flags, with: "--host=127.0.0.1")
-    False -> Ok(input.flags)
+  assert Ok(flag.S(host)) =
+    "host"
+    |> flag.get_value(from: input.flags)
+  assert Ok(flags) = case host {
+    "localhost" ->
+      "--host=127.0.0.1"
+      |> flag.update_flags(in: input.flags)
+    _else -> Ok(input.flags)
   }
 
   [
-    [string.concat([rad_path, "/priv/node_modules/wonton/src/bin.js"])],
+    [
+      [rad_path, "/priv/node_modules/wonton/src/bin.js"]
+      |> string.concat,
+    ],
     util.relay_flags(flags),
     ["--", "./build/dev/docs"],
   ]
@@ -545,7 +570,7 @@ pub type Formatter {
 
 /// TODO
 ///
-pub fn format(input: CommandInput) -> Result(String, Snag) {
+pub fn format(input: CommandInput) -> TaskResult {
   let formatters = [
     Formatter(
       name: "gleam",
@@ -553,90 +578,92 @@ pub fn format(input: CommandInput) -> Result(String, Snag) {
       run: ["gleam", "format"],
     ),
     ..formatters_from_config()
+    |> list.map(with: result.map_error(_, with: fn(snag) {
+      Snag(..snag, issue: "invalid `[[rad.formatters]]` in `gleam.toml`")
+      |> snag.pretty_print
+      |> string.trim
+      |> string.append(suffix: "\n")
+      |> io.println
+    }))
+    |> result.values
   ]
 
-  assert Ok(flag.B(check)) = flag.get_value(from: input.flags, for: "check")
-
+  assert Ok(flag.B(check)) =
+    "check"
+    |> flag.get_value(from: input.flags)
   let #(action, extra, failure) = case check {
-    False -> #(" Formatting", "", "formatting")
     True -> #("   Checking", " formatting", "format check")
+    False -> #(" Formatting", "", "formatting")
   }
 
-  formatters
-  |> list.filter_map(with: fn(formatter) {
-    [
-      action
-      |> shellout.style(with: shellout.color(["magenta"]), custom: lookups),
-      " ",
-      formatter.name,
-      extra,
-      "...",
-    ]
-    |> string.concat
-    |> io.println
-    let command = case check {
-      True -> formatter.check
-      False -> formatter.run
-    }
-    let result =
-      CommandInput(..input, flags: map.new())
-      |> user(command, _)
-      |> result.map_error(with: fn(_snag) {
-        string.concat(["`", formatter.name, "` formatter failed"])
-      })
-    case result {
-      Ok(_empty) -> Error(Nil)
-      Error(message) -> Ok(message)
-    }
-  })
-  |> fn(errors) {
-    case errors == [] {
-      True -> Ok("")
-      False -> {
-        io.println("")
-        [failure, " failed"]
-        |> string.concat
-        |> Snag(cause: errors)
-        |> Error
+  let errors =
+    formatters
+    |> list.filter_map(with: fn(formatter) {
+      [
+        action
+        |> shellout.style(with: shellout.color(["magenta"]), custom: lookups),
+        " ",
+        formatter.name,
+        extra,
+        "...",
+      ]
+      |> string.concat
+      |> io.println
+      let command = case check {
+        True -> formatter.check
+        False -> formatter.run
       }
+      let result =
+        CommandInput(..input, flags: map.new())
+        |> user(command, _)
+        |> result.map_error(with: fn(_snag) {
+          string.concat(["`", formatter.name, "` formatter failed"])
+        })
+      case result {
+        Ok(_output) -> Error(Nil)
+        Error(message) -> Ok(message)
+      }
+    })
+  case errors {
+    [] -> Ok("")
+    _else -> {
+      io.println("")
+      [failure, " failed"]
+      |> string.concat
+      |> Snag(cause: errors)
+      |> Error
     }
   }
 }
 
 /// TODO
 ///
-pub fn formatters_from_config() -> List(Formatter) {
-  assert Ok(formatters) =
-    util.toml_tables(
-      read: "gleam.toml",
-      get: ["rad", "formatters"],
-      require: ["name", "check", "run"],
-      include: [],
+pub fn formatters_from_config() -> List(Result(Formatter, Snag)) {
+  let dynamic_strings = fn(name) {
+    dynamic.field(named: name, of: dynamic.list(of: dynamic.string))
+  }
+  let requirements =
+    Formatter
+    |> dynamic.decode3(
+      dynamic.field(named: "name", of: dynamic.string),
+      dynamic_strings("check"),
+      dynamic_strings("run"),
     )
-    |> result.map(with: list.map(_, with: fn(formatter) {
-      assert Ok(name) =
-        util.table_item(from: formatter, get: "name", expect: dynamic.string)
-      assert Ok(check) =
-        util.table_item(
-          from: formatter,
-          get: "check",
-          expect: dynamic.list(of: dynamic.string),
-        )
-      assert Ok(run) =
-        util.table_item(
-          from: formatter,
-          get: "run",
-          expect: dynamic.list(of: dynamic.string),
-        )
-      Formatter(name: name, check: check, run: run)
-    }))
-    |> result.or(Ok([]))
-  formatters
+
+  "gleam.toml"
+  |> toml.parse_file
+  |> result.lazy_unwrap(or: toml.new)
+  |> toml.decode(
+    get: ["rad", "formatters"],
+    expect: dynamic.list(of: toml.from_dynamic),
+  )
+  |> result.unwrap(or: [])
+  |> list.map(with: toml.decode(from: _, get: [], expect: requirements))
 }
 
 /// TODO
 ///
-pub fn gleam(path: List(String), input: CommandInput) -> Result(String, Snag) {
+pub fn gleam(path: List(String), input: CommandInput) -> TaskResult {
   [path, util.relay_flags(input.flags), input.args]
   |> list.flatten
   |> shellout.command(run: "gleam", in: ".", opt: [LetBeStderr, LetBeStdout])
@@ -650,49 +677,22 @@ pub fn gleam(path: List(String), input: CommandInput) -> Result(String, Snag) {
 /// [`Task`](#Task) exists, is hidden from ancestor help dialogues, but can be
 /// viewed directly.
 ///
-pub fn help(
-  tasks: Tasks,
-  path: List(String),
-  input: CommandInput,
-) -> Result(String, Snag) {
-  let heading = shellout.style(
-    _,
-    with: shellout.display(["bold"])
-    |> map.merge(shellout.color([heading_color])),
-    custom: lookups,
-  )
-
-  let max_width = fn(items: List(a), length_fun: fn(a) -> Int) -> Int {
-    items
-    |> list.fold(
-      from: 0,
-      with: fn(acc, item) {
-        let length = length_fun(item)
-        case length > acc {
-          False -> acc
-          True -> length
-        }
-      },
-    )
-  }
-
-  let drop_empty_strings = list.filter(_, for: fn(string) { string != "" })
-
+pub fn help(tasks: Tasks, path: List(String), input: CommandInput) -> TaskResult {
   let path = case path {
     ["help"] -> input.args
-    _path -> path
+    _else -> path
   }
 
-  let tasks = list.flatten([tasks, tasks_from_config()])
+  let tasks =
+    [tasks, result.values(tasks_from_config())]
+    |> list.flatten
 
   try task =
     tasks
     |> list.find(one_that: fn(task) { task.path == path })
     |> result.replace_error(snag.new("rad task not found"))
 
-  let has_flags = task.flags != []
-  let has_parameters = task.parameters != []
-
+  // Get subtasks
   let tasks =
     tasks
     |> list.filter_map(with: fn(task) {
@@ -707,31 +707,28 @@ pub fn help(
       }
     })
 
+  let has_flags = task.flags != []
+  let has_parameters = task.parameters != []
   let has_tasks = tasks != []
 
-  let width =
-    tasks
-    |> max_width(fn(task) {
-      task.path
-      |> string.join(with: " ")
-      |> string.length
-    })
-
   try info = info()
+  let info = Some(info)
 
-  let description = case task.shortdoc != "" {
-    True -> {
+  let description = case task.shortdoc {
+    "" -> None
+    _else -> {
       let description =
         [tab, task.shortdoc]
         |> string.concat
       [heading("Description"), description]
       |> string.join(with: "\n")
+      |> Some
     }
-    False -> ""
   }
 
-  let path = case path != [] {
-    True ->
+  let path = case path {
+    [] -> None
+    _else ->
       path
       |> string.join(with: " ")
       |> shellout.style(
@@ -739,7 +736,7 @@ pub fn help(
         |> map.merge(shellout.color([path_color])),
         custom: lookups,
       )
-    False -> ""
+      |> Some
   }
 
   let subcommand = case has_tasks {
@@ -749,26 +746,29 @@ pub fn help(
         with: shellout.color([subcommand_color]),
         custom: lookups,
       )
-    False -> ""
+      |> Some
+    False -> None
   }
 
   let flags = case has_flags {
     True ->
       "[flags]"
       |> shellout.style(with: shellout.color([flag_color]), custom: lookups)
-    False -> ""
+      |> Some
+    False -> None
   }
 
   let parameters = case has_parameters {
     True ->
       task.parameters
-      |> list.map(pair.first)
+      |> list.map(with: pair.first)
       |> string.join(with: " ")
       |> shellout.style(
         with: shellout.color([parameter_color]),
         custom: lookups,
       )
-    False -> ""
+      |> Some
+    False -> None
   }
 
   let usage =
@@ -778,191 +778,282 @@ pub fn help(
       |> map.merge(shellout.color(["pink"])),
       custom: lookups,
     )
+    |> Some
   let usage =
     [usage, path, subcommand, flags, parameters]
-    |> drop_empty_strings
+    |> option.values
     |> string.join(with: " ")
     |> string.append(tab, suffix: _)
   let usage =
     [heading("Usage"), usage]
     |> string.join(with: "\n")
+    |> Some
 
-  let parameters = case has_parameters {
-    True -> {
-      let width =
-        pair.first
-        |> function.compose(string.length)
-        |> max_width(task.parameters, _)
-      [
-        heading("Parameters"),
-        ..task.parameters
-        |> list.map(with: fn(parameter) {
-          let #(name, doc) = parameter
-          let name =
-            name
-            |> string.pad_right(to: width, with: " ")
-            |> shellout.style(
-              with: shellout.color([parameter_color]),
-              custom: lookups,
-            )
-          [tab, name, tab, doc]
-          |> string.concat
-        })
-      ]
-      |> string.join(with: "\n")
-    }
-    False -> ""
-  }
+  let parameters =
+    "Parameters"
+    |> section(
+      when: has_parameters,
+      enum: task.parameters,
+      with: function.identity,
+      styled: shellout.color([parameter_color]),
+      sorted: fn(_a, _b) { order.Eq },
+    )
 
-  let flags = case has_flags {
-    True -> {
-      let width =
-        task.flags
-        |> max_width(fn(flag) {
-          string.length(flag.0) + string.length(flag.prefix)
-        })
-      [
-        heading("Flags"),
-        ..task.flags
-        |> list.map(with: fn(flag) {
-          let #(name, contents) = flag
-          let name =
-            [flag.prefix, name]
-            |> string.concat
-            |> string.pad_right(to: width, with: " ")
-            |> shellout.style(
-              with: shellout.color([flag_color]),
-              custom: lookups,
-            )
-          [tab, name, tab, contents.description]
+  let flags =
+    "Flags"
+    |> section(
+      when: has_flags,
+      enum: task.flags,
+      with: fn(flag) {
+        let #(name, contents) = flag
+        let name =
+          [flag.prefix, name]
           |> string.concat
-        })
-        |> list.sort(by: string.compare)
-      ]
-      |> string.join(with: "\n")
-    }
-    False -> ""
-  }
+        #(name, contents.description)
+      },
+      styled: shellout.color([flag_color]),
+      sorted: string.compare,
+    )
 
-  let subcommands = case has_tasks {
-    True ->
-      [
-        heading("Subcommands"),
-        ..tasks
-        |> list.map(with: fn(task) {
-          let [path] = task.path
-          let path =
-            path
-            |> string.pad_right(to: width, with: " ")
-            |> shellout.style(
-              with: shellout.color([subcommand_color]),
-              custom: lookups,
-            )
-          [tab, path, tab, task.shortdoc]
-          |> string.concat
-        })
-        |> list.sort(string.compare)
-      ]
-      |> string.join(with: "\n")
-    False -> ""
-  }
+  let subcommands =
+    "Subcommands"
+    |> section(
+      when: has_tasks,
+      enum: tasks,
+      with: fn(task) {
+        let [name] = task.path
+        #(name, task.shortdoc)
+      },
+      styled: shellout.color([subcommand_color]),
+      sorted: string.compare,
+    )
 
   [info, description, usage, parameters, flags, subcommands]
-  |> drop_empty_strings
+  |> option.values
   |> string.join(with: "\n\n")
   |> Ok
 }
 
 /// Gathers and formats information about `rad`.
 ///
-pub fn info() -> Result(String, Snag) {
-  let file = "gleam.toml"
-  try config =
-    file
-    |> util.toml_read_file
-    |> result.map_error(with: fn(_nil) {
-      ["failed to read `", file, "`"]
-      |> string.concat
-      |> snag.new
-    })
-  try project =
-    config
-    |> util.toml_get(["name"])
-    |> result.replace_error(snag.new("project name not found"))
-    |> result.then(apply: function.compose(
-      dynamic.string,
-      result.replace_error(_, snag.new("project name is not a string")),
-    ))
-
-  try config = case project {
-    "rad" -> Ok(config)
-    _name -> {
-      let file = "build/packages/rad/gleam.toml"
-      file
-      |> util.toml_read_file
-      |> result.map_error(with: fn(_nil) {
-        ["failed to read `", file, "`"]
-        |> string.concat
-        |> snag.new
-      })
-    }
+pub fn info() -> TaskResult {
+  // Check if `rad` is the base project or a dependency
+  try toml =
+    "gleam.toml"
+    |> toml.parse_file
+  try project_name =
+    ["name"]
+    |> toml.decode(from: toml, expect: dynamic.string)
+  try toml = case project_name {
+    "rad" -> Ok(toml)
+    _else ->
+      "build/packages/rad/gleam.toml"
+      |> toml.parse_file
   }
 
-  try version =
-    config
-    |> util.toml_get(["version"])
-    |> result.replace_error(snag.new("rad version not found"))
-    |> result.then(apply: function.compose(
-      dynamic.string,
-      result.replace_error(_, snag.new("rad version is not a string")),
-    ))
+  let name =
+    "rad"
+    |> shellout.style(
+      with: shellout.display(["bold", "italic"])
+      |> map.merge(shellout.color(["pink"])),
+      custom: lookups,
+    )
+    |> Some
 
-  try description =
-    config
-    |> util.toml_get(["description"])
-    |> result.replace_error(snag.new("rad description not found"))
-    |> result.then(apply: function.compose(
-      dynamic.string,
-      result.replace_error(_, snag.new("rad description is not a string")),
+  let version =
+    ["version"]
+    |> toml.decode(from: toml, expect: dynamic.string)
+    |> result.map(with: shellout.style(
+      _,
+      with: shellout.display(["italic"]),
+      custom: lookups,
     ))
+    |> option.from_result
+
+  let description =
+    ["description"]
+    |> toml.decode(from: toml, expect: dynamic.string)
+    |> result.map(with: shellout.style(
+      _,
+      with: shellout.display(["italic"])
+      |> map.merge(shellout.color(["purple"])),
+      custom: lookups,
+    ))
+    |> option.from_result
 
   [
-    string.concat([
-      "rad"
-      |> shellout.style(
-        with: shellout.display(["bold", "italic"])
-        |> map.merge(shellout.color(["pink"])),
-        custom: lookups,
-      ),
-      " ",
-      version
-      |> shellout.style(with: shellout.display(["italic"]), custom: lookups),
-    ]),
-    string.concat([
-      tab,
-      description
-      |> shellout.style(
-        with: shellout.display(["italic"])
-        |> map.merge(shellout.color(["purple"])),
-        custom: lookups,
-      ),
-    ]),
+    [name, version]
+    |> option.values
+    |> string.join(with: " ")
+    |> Some,
+    [Some(""), description]
+    |> option.all
+    |> option.map(with: string.join(_, with: tab)),
   ]
+  |> option.values
   |> string.join(with: "\n")
   |> Ok
 }
 
 /// TODO
 ///
-pub fn name(input: CommandInput) -> Result(String, Snag) {
-  case input.args {
-    [] ->
-      ["name"]
-      |> util.toml(read: "gleam.toml", expect: dynamic.string)
-    _args -> {
-      try name = util.dependency(input.args)
-      Ok(name)
+pub fn heading(name: String) -> String {
+  name
+  |> shellout.style(
+    with: shellout.display(["bold"])
+    |> map.merge(shellout.color([heading_color])),
+    custom: lookups,
+  )
+}
+
+/// TODO
+///
+pub fn section(
+  named name: String,
+  when cond: Bool,
+  enum items: List(any),
+  with format_fun: fn(any) -> #(String, String),
+  styled style: StyleFlags,
+  sorted order_by: fn(String, String) -> Order,
+) -> Option(String) {
+  case cond {
+    True -> {
+      let items =
+        items
+        |> list.map(with: format_fun)
+      let width =
+        items
+        |> list.fold(
+          from: 0,
+          with: fn(acc, item) {
+            let length = string.length(item.0)
+            case length > acc {
+              True -> length
+              False -> acc
+            }
+          },
+        )
+      [
+        heading(name),
+        ..items
+        |> list.map(with: fn(item) {
+          let name =
+            item.0
+            |> string.pad_right(to: width, with: " ")
+            |> shellout.style(with: style, custom: lookups)
+          [tab, name, tab, item.1]
+          |> string.concat
+        })
+        |> list.sort(order_by)
+      ]
+      |> string.join(with: "\n")
+      |> Some
     }
+    False -> None
+  }
+}
+
+/// Provides multitarget support for a given [`Task`](#Task).
+///
+/// If multiple targets are given with the `--target` flag, the [`Task`](#Task)
+/// will be run for each of them in succession.
+///
+/// This [`Task`](#Task) runs for all targets regardless of any failures;
+/// however, all runs must succeed for this [`Task`](#Task) to succeed.
+///
+pub fn multitarget(
+  task: fn(CommandInput) -> TaskResult,
+  input: CommandInput,
+) -> TaskResult {
+  assert Ok(flag.LS(targets)) =
+    "target"
+    |> flag.get_value(from: input.flags)
+
+  let #(oks, errors) =
+    targets
+    |> list.unique
+    |> list.index_map(with: fn(index, target) {
+      case index {
+        0 -> Nil
+        _else -> io.println("")
+      }
+      [
+        "  Targeting"
+        |> shellout.style(with: shellout.color(["magenta"]), custom: lookups),
+        " ",
+        target,
+        "...",
+      ]
+      |> string.concat
+      |> io.println
+      // Run the given task
+      assert Ok(flags) =
+        ["--target=", target]
+        |> string.concat
+        |> flag.update_flags(in: input.flags)
+      input.args
+      |> CommandInput(flags: flags)
+      |> task
+      |> function.tap(fn(result) {
+        case result {
+          Ok(_output) -> Nil
+          Error(snag) ->
+            snag
+            |> snag.pretty_print
+            |> string.trim
+            |> io.println
+        }
+      })
+    })
+    |> list.partition(with: result.is_ok)
+
+  // Format output
+  case errors {
+    [] ->
+      oks
+      |> result.values
+      |> string.join(with: "\n")
+      |> Ok
+    _else -> {
+      io.println("")
+      let errors = list.length(of: errors)
+      let results =
+        [errors, list.length(of: oks)]
+        |> int.sum
+        |> int.to_string
+      let failure = case results {
+        "1" -> "target"
+        _else -> "targets"
+      }
+      [
+        errors
+        |> int.to_string,
+        " of ",
+        results,
+        " ",
+        failure,
+        " failed",
+      ]
+      |> string.concat
+      |> snag.new
+      |> Error
+    }
+  }
+  |> result.map(with: string.trim)
+}
+
+/// TODO
+///
+pub fn name(input: CommandInput) -> TaskResult {
+  case input.args {
+    [] -> {
+      try toml =
+        "gleam.toml"
+        |> toml.parse_file
+      ["name"]
+      |> toml.decode(from: toml, expect: dynamic.string)
+    }
+    _else -> util.dependency(input.args)
   }
   |> result.map(with: shellout.style(
     _,
@@ -973,7 +1064,7 @@ pub fn name(input: CommandInput) -> Result(String, Snag) {
 
 /// TODO
 ///
-pub fn origin(_input: CommandInput) -> Result(String, Snag) {
+pub fn origin(_input: CommandInput) -> TaskResult {
   shellout.command(
     run: "git",
     with: ["remote", "get-url", "origin"],
@@ -985,15 +1076,15 @@ pub fn origin(_input: CommandInput) -> Result(String, Snag) {
 
 /// TODO
 ///
-pub fn root(input: CommandInput) -> Result(String, Snag) {
-  assert Ok(flag.B(ver)) = flag.get_value(from: input.flags, for: "version")
+pub fn root(input: CommandInput) -> TaskResult {
+  assert Ok(flag.B(ver)) =
+    "version"
+    |> flag.get_value(from: input.flags)
   case ver {
-    False -> help(tasks(), [], input)
     True -> {
       let flags =
-        flag.build_map([
-          #("bare", flag.Contents(value: flag.B(False), description: "")),
-        ])
+        [#("bare", flag.Contents(value: flag.B(False), description: ""))]
+        |> flag.build_map
       let version = fn(args) {
         args
         |> CommandInput(flags: flags)
@@ -1003,70 +1094,74 @@ pub fn root(input: CommandInput) -> Result(String, Snag) {
       |> version
       |> result.lazy_or(fn() { version([]) })
     }
+    False ->
+      tasks()
+      |> help([], input)
   }
 }
 
 /// TODO
 ///
-pub fn shell(input: CommandInput) -> Result(String, Snag) {
+pub fn shell(input: CommandInput) -> TaskResult {
   do_shell(input)
 }
 
 if erlang {
-  fn do_shell(_input: CommandInput) -> Result(String, Snag) {
+  fn do_shell(_input: CommandInput) -> TaskResult {
     util.refuse_erlang()
   }
 }
 
 if javascript {
-  fn do_shell(input: CommandInput) -> Result(String, Snag) {
+  fn do_shell(input: CommandInput) -> TaskResult {
     let options = [LetBeStderr, LetBeStdout]
     let runtime = case input.args {
-      [] -> "erlang"
       [runtime, ..] -> runtime
+      _else -> "erlang"
     }
     case runtime {
-      "elixir" | "iex" ->
-        ["name"]
-        |> util.toml(read: "gleam.toml", expect: dynamic.string)
-        |> result.then(apply: fn(name) {
+      "elixir" | "iex" -> {
+        try toml =
+          "gleam.toml"
+          |> toml.parse_file
+        try name =
+          ["name"]
+          |> toml.decode(from: toml, expect: dynamic.string)
+        try ebins =
           util.ebin_paths()
           |> result.replace_error(snag.new("failed to find `ebin` paths"))
-          |> result.map(with: fn(ebins) { #(name, ebins) })
-        })
-        |> result.then(apply: fn(acc) {
-          let #(name, ebins) = acc
-          shellout.command(
-            run: "iex",
-            with: list.flatten([
-              ["--app", name],
-              ["--erl", string.join(["-pa", ..ebins], with: " ")],
-            ]),
-            in: ".",
-            opt: options,
-          )
-          |> result.replace_error(snag.new("failed to run `iex` shell"))
-        })
-
-      "nodejs" | "node" ->
-        util.javascript_run(
-          with: [
-            "--interactive",
-            [
-              ["--eval=import('"],
-              [rad_path, "/dist/rad_ffi.mjs"],
-              ["')"],
-              [".then(module => module.load_modules())"],
-            ]
-            |> list.flatten
-            |> string.concat,
+        [
+          ["--app", name],
+          [
+            "--erl",
+            ["-pa", ..ebins]
+            |> string.join(with: " "),
           ],
-          opt: options,
-        )
+        ]
+        |> list.flatten
+        |> shellout.command(run: "iex", in: ".", opt: options)
+        |> result.replace_error(snag.new("failed to run `iex` shell"))
+      }
 
-      "erlang" | "erl" -> util.erlang_run(with: [], opt: options)
+      "nodejs" | "node" -> {
+        let script =
+          [
+            ["import('"],
+            [rad_path, "/dist/rad_ffi.mjs"],
+            ["')"],
+            [".then(module => module.load_modules())"],
+          ]
+          |> list.flatten
+          |> string.concat
+        ["--interactive", "--eval", script]
+        |> util.javascript_run(opt: options)
+      }
 
-      _runtime ->
+      "erlang" | "erl" ->
+        []
+        |> util.erlang_run(opt: options)
+
+      _else ->
         ["unsupported runtime `", runtime, "`"]
         |> string.concat
         |> snag.new
@@ -1077,46 +1172,40 @@ if javascript {
 
 /// TODO
 ///
-pub fn tree(_input: CommandInput) -> Result(String, Snag) {
+pub fn tree(_input: CommandInput) -> TaskResult {
   assert Ok(working_directory) = util.working_directory()
   let result =
-    shellout.command(
-      run: "exa",
-      with: [
-        "--all",
-        "--color=always",
-        "--git-ignore",
-        string.concat(["--ignore-glob=", ignore_glob]),
-        "--long",
-        "--git",
-        "--no-filesize",
-        "--no-permissions",
-        "--no-user",
-        "--no-time",
-        "--tree",
-        working_directory,
-      ],
-      in: ".",
-      opt: [],
-    )
+    [
+      "--all",
+      "--color=always",
+      "--git-ignore",
+      ["--ignore-glob=", ignore_glob]
+      |> string.concat,
+      "--long",
+      "--git",
+      "--no-filesize",
+      "--no-permissions",
+      "--no-user",
+      "--no-time",
+      "--tree",
+      working_directory,
+    ]
+    |> shellout.command(run: "exa", in: ".", opt: [])
     |> result.replace_error(snag.new("command `exa` not found"))
   case result {
-    Error(error) ->
-      shellout.command(
-        run: "tree",
-        with: list.flatten([
-          ["-a"],
-          ["-C"],
-          ["-I", ignore_glob],
-          ["--matchdirs"],
-          ["--noreport"],
-          [working_directory],
-        ]),
-        in: ".",
-        opt: [],
-      )
-      |> result.replace_error(snag.layer(error, "command `tree` not found"))
     Ok(_output) -> result
+    Error(error) ->
+      [
+        ["-a"],
+        ["-C"],
+        ["-I", ignore_glob],
+        ["--matchdirs"],
+        ["--noreport"],
+        [working_directory],
+      ]
+      |> list.flatten
+      |> shellout.command(run: "tree", in: ".", opt: [])
+      |> result.replace_error(snag.layer(error, "command `tree` not found"))
   }
   |> result.map_error(with: function.compose(
     snag.layer(_, "failed to find a known tree command"),
@@ -1126,51 +1215,79 @@ pub fn tree(_input: CommandInput) -> Result(String, Snag) {
 
 /// TODO
 ///
-pub fn user(command: List(String), input: CommandInput) -> Result(String, Snag) {
+pub fn user(command: List(String), input: CommandInput) -> TaskResult {
   let [command, ..args] = command
-  shellout.command(
-    run: command,
-    with: list.flatten([args, util.relay_flags(input.flags), input.args]),
-    in: ".",
-    opt: [LetBeStderr, LetBeStdout],
-  )
+  [args, util.relay_flags(input.flags), input.args]
+  |> list.flatten
+  |> shellout.command(run: command, in: ".", opt: [LetBeStderr, LetBeStdout])
   |> result.replace_error(snag.new("task failed"))
 }
 
 /// TODO
 ///
-pub fn version(input: CommandInput) -> Result(String, Snag) {
-  assert Ok(flag.B(bare)) = flag.get_value(from: input.flags, for: "bare")
+pub fn version(input: CommandInput) -> TaskResult {
+  assert Ok(flag.B(bare)) =
+    "bare"
+    |> flag.get_value(from: input.flags)
+
+  try toml =
+    "gleam.toml"
+    |> toml.parse_file
+
   try name = case bare {
+    True -> Ok(None)
     False ->
-      input
-      |> name
-      |> result.map(with: string.append(to: _, suffix: " "))
-    True -> Ok("")
+      case input.args {
+        [] ->
+          ["name"]
+          |> toml.decode(from: toml, expect: dynamic.string)
+        _else -> util.dependency(input.args)
+      }
+      |> result.map(with: Some)
   }
-  case input.args {
+  let name =
+    name
+    |> option.map(with: shellout.style(
+      _,
+      with: util.style_flags(input.flags),
+      custom: lookups,
+    ))
+
+  try version = case input.args {
     [] ->
       ["version"]
-      |> util.toml(read: "gleam.toml", expect: dynamic.string)
-    path -> util.packages(path)
+      |> toml.decode(from: toml, expect: dynamic.string)
+    _else -> util.packages(input.args)
   }
-  |> result.map(with: string.append(to: name, suffix: _))
+  let version =
+    case bare {
+      True -> version
+      False ->
+        ["v", version]
+        |> string.concat
+    }
+    |> Some
+
+  [name, version]
+  |> option.values
+  |> string.join(with: " ")
+  |> Ok
 }
 
 /// TODO
 ///
-pub fn watch(input: CommandInput) -> Result(String, Snag) {
+pub fn watch(input: CommandInput) -> TaskResult {
   do_watch(input)
 }
 
 if erlang {
-  fn do_watch(_input: CommandInput) -> Result(String, Snag) {
+  fn do_watch(_input: CommandInput) -> TaskResult {
     util.refuse_erlang()
   }
 }
 
 if javascript {
-  fn do_watch(input: CommandInput) -> Result(String, Snag) {
+  fn do_watch(input: CommandInput) -> TaskResult {
     let options = [LetBeStderr, LetBeStdout]
     let rad = util.which_rad()
     let flags = util.relay_flags(input.flags)
@@ -1183,60 +1300,53 @@ if javascript {
     ]
     |> string.concat
     |> io.println
+
     let result =
-      shellout.command(
-        run: "watchexec",
-        with: list.flatten([
-          ignore_glob
-          |> string.split(on: "|")
-          |> list.map(with: fn(directory) {
-            string.concat(["--ignore=**/", directory, "/**"])
-          }),
-          ["--postpone"],
-          ["--watch-when-idle"],
-          ["--", rad, "watch", "do", ..flags],
-        ]),
-        in: ".",
-        opt: options,
-      )
+      [
+        ignore_glob
+        |> string.split(on: "|")
+        |> list.map(with: fn(directory) {
+          ["--ignore=**/", directory, "/**"]
+          |> string.concat
+        }),
+        ["--postpone"],
+        ["--watch-when-idle"],
+        ["--", rad, "watch", "do", ..flags],
+      ]
+      |> list.flatten
+      |> shellout.command(run: "watchexec", in: ".", opt: options)
       |> result.replace_error(snag.new("command `watchexec` not found"))
     case result {
+      Ok(_output) -> result
       Error(error) ->
         watch_loop(
           on: fn() {
-            shellout.command(
-              run: "inotifywait",
-              with: list.flatten([
-                ["--event", "create"],
-                ["--event", "delete"],
-                ["--event", "modify"],
-                ["--event", "move"],
-                [
-                  "--exclude",
-                  string.concat(["^[./\\\\]*(", ignore_glob, ")([/\\\\].*)*$"]),
-                ],
-                ["-qq"],
-                ["--recursive"],
-                ["."],
-              ]),
-              in: ".",
-              opt: options,
-            )
+            [
+              ["--event", "create"],
+              ["--event", "delete"],
+              ["--event", "modify"],
+              ["--event", "move"],
+              [
+                "--exclude",
+                ["^[./\\\\]*(", ignore_glob, ")([/\\\\].*)*$"]
+                |> string.concat,
+              ],
+              ["-qq"],
+              ["--recursive"],
+              ["."],
+            ]
+            |> list.flatten
+            |> shellout.command(run: "inotifywait", in: ".", opt: options)
           },
           do: fn() {
-            shellout.command(
-              run: rad,
-              with: ["watch", "do", ..flags],
-              in: ".",
-              opt: options,
-            )
+            ["watch", "do", ..flags]
+            |> shellout.command(run: rad, in: ".", opt: options)
           },
         )
         |> result.replace_error(snag.layer(
           error,
           "command `inotifywait` not found",
         ))
-      Ok(_output) -> result
     }
     |> result.map_error(with: function.compose(
       snag.layer(_, "failed to find a known watcher command"),
@@ -1253,13 +1363,21 @@ if javascript {
 
 /// TODO
 ///
-pub fn watch_do(input: CommandInput) -> Result(String, Snag) {
-  let options = [LetBeStderr, LetBeStdout]
-  assert Ok(flag.B(no_docs)) = flag.get_value(from: input.flags, for: "no-docs")
-  assert Ok(flag.I(port)) = flag.get_value(from: input.flags, for: "port")
-  assert Ok(flag.S(target)) = flag.get_value(from: input.flags, for: "target")
+pub fn watch_do(input: CommandInput) -> TaskResult {
+  assert Ok(flag.B(no_docs)) =
+    "no-docs"
+    |> flag.get_value(from: input.flags)
+  assert Ok(flag.I(port)) =
+    "port"
+    |> flag.get_value(from: input.flags)
+  assert Ok(target_flag) =
+    "target"
+    |> map.get(input.flags, _)
+
   io.println("")
+
   case no_docs {
+    True -> Nil
     False -> {
       [
         " Generating"
@@ -1269,26 +1387,19 @@ pub fn watch_do(input: CommandInput) -> Result(String, Snag) {
       |> string.join(with: " ")
       |> io.println
       let _result =
-        shellout.command(
-          run: "gleam",
-          with: ["docs", "build"],
-          in: ".",
-          opt: [],
-        )
+        ["docs", "build"]
+        |> shellout.command(run: "gleam", in: ".", opt: [])
       // Live reload docs
       ["http://localhost:", int.to_string(port), "/wonton-update"]
       |> string.concat
       |> util.ping
       Nil
     }
-    True -> Nil
   }
-  shellout.command(
-    run: "gleam",
-    with: ["test", string.concat(["--target=", target])],
-    in: ".",
-    opt: options,
-  )
-  |> result.replace("")
-  |> result.replace_error(snag.new("test failed"))
+
+  let gleam_test = gleam(["test"], _)
+  [#("target", target_flag)]
+  |> map.from_list
+  |> CommandInput(args: input.args)
+  |> multitarget(gleam_test, _)
 }

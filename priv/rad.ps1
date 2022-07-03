@@ -21,6 +21,11 @@ if ("${snag}" -ne "") {
   Fail "${snag}"
 }
 
+$config = "gleam.toml"
+if (-not (Test-Path -Type Leaf "./${config}")) {
+  Fail "error: ``${config}`` not found; ``${self}`` must be invoked from a Gleam project's base directory"
+}
+
 # Compile if necessary.
 #
 # Redirect stdout to stderr, keeping stdout clear for the given task.

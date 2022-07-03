@@ -1,30 +1,33 @@
 //// A motley assortment of utility functions.
 ////
 
-import gleam/dynamic.{DecodeError, DecodeErrors, Decoder, Dynamic}
+import gleam/dynamic
 import gleam/float
 import gleam/function
 import gleam/http.{Header}
 import gleam/int
-import gleam/io
 import gleam/list
-import gleam/map.{Map}
+import gleam/map
 import gleam/option.{Some}
 import gleam/result
 import gleam/string
 import gleam/uri.{Uri}
 import glint/flag
+import rad/toml
 import shellout.{CommandOpt, StyleFlags}
 import snag.{Snag}
 
 if erlang {
+  import gleam/erlang/atom
   import gleam/erlang/file
   import gleam/http/request
   import gleam/httpc
+
+  type Dynamic =
+    dynamic.Dynamic
 }
 
 if javascript {
-  import gleam/dynamic
   import gleam/json
 }
 
@@ -50,37 +53,6 @@ pub fn dependency(args: List(String)) -> Result(String, Snag) {
 
 /// TODO
 ///
-pub fn dynamic_table(of value_type: Decoder(v)) -> Decoder(Map(String, v)) {
-  do_dynamic_table(dynamic.string, value_type)
-}
-
-if erlang {
-  fn do_dynamic_table(
-    key_type: Decoder(k),
-    value_type: Decoder(v),
-  ) -> Decoder(Map(k, v)) {
-    dynamic.map(key_type, value_type)
-  }
-}
-
-if javascript {
-  fn do_dynamic_table(
-    key_type: Decoder(k),
-    value_type: Decoder(v),
-  ) -> Decoder(Map(k, v)) {
-    fn(value) {
-      try map = decode_object(value)
-      map
-      |> dynamic.map(key_type, value_type)
-    }
-  }
-
-  external fn decode_object(Dynamic) -> Result(Dynamic, DecodeErrors) =
-    "../rad_ffi.mjs" "decode_object"
-}
-
-/// TODO
-///
 pub fn ebin_paths() -> Result(List(String), Nil) {
   do_ebin_paths()
 }
@@ -88,9 +60,11 @@ pub fn ebin_paths() -> Result(List(String), Nil) {
 if erlang {
   fn do_ebin_paths() -> Result(List(String), Nil) {
     let prefix = "./build/dev/erlang"
-    file.list_directory(prefix)
+    prefix
+    |> file.list_directory
     |> result.map(with: list.map(_, with: fn(subdirectory) {
-      string.join([prefix, subdirectory, "ebin"], with: "/")
+      [prefix, subdirectory, "ebin"]
+      |> string.join(with: "/")
     }))
     |> result.nil_error
   }
@@ -112,7 +86,7 @@ pub fn erlang_run(
   |> result.then(apply: fn(ebins) {
     [["-pa", ..ebins], args]
     |> list.flatten
-    |> shellout.command(run: "erl", with: _, in: ".", opt: options)
+    |> shellout.command(run: "erl", in: ".", opt: options)
     |> result.replace_error(snag.new("failed to run `erl`"))
   })
 }
@@ -157,44 +131,20 @@ pub fn javascript_run(
   with args: List(String),
   opt options: List(CommandOpt),
 ) -> Result(String, Snag) {
-  shellout.command(
-    run: "node",
-    with: [
-      "--experimental-fetch",
-      "--experimental-repl-await",
-      "--no-warnings",
-      ..args
-    ],
-    in: ".",
-    opt: options,
-  )
+  ["--experimental-fetch", "--experimental-repl-await", "--no-warnings", ..args]
+  |> shellout.command(run: "node", in: ".", opt: options)
   |> result.replace_error(snag.new("failed to run `node`"))
 }
 
 /// TODO
 ///
-pub fn json_encode(data: Dynamic) -> String {
-  do_json_encode(data)
-}
-
-if erlang {
-  external fn do_json_encode(Dynamic) -> String =
-    "thoas" "encode"
-}
-
-if javascript {
-  external fn do_json_encode(Dynamic) -> String =
-    "" "globalThis.JSON.stringify"
-}
-
-/// TODO
-///
 pub fn packages(path: List(String)) -> Result(String, Snag) {
-  toml(
-    read: "build/packages/packages.toml",
-    get: ["packages", ..path],
-    expect: dynamic.string,
-  )
+  try toml =
+    "build/packages/packages.toml"
+    |> toml.parse_file
+
+  ["packages", ..path]
+  |> toml.decode(from: toml, expect: dynamic.string)
 }
 
 /// TODO
@@ -203,7 +153,7 @@ pub fn ping(uri_string: String) -> Result(Int, Int) {
   assert Ok(uri) = uri.parse(uri_string)
   case uri.host {
     Some("localhost") -> Uri(..uri, host: Some("127.0.0.1"))
-    _host -> uri
+    _else -> uri
   }
   |> uri.to_string
   |> do_ping([#("cache-control", "no-cache, no-store")])
@@ -215,10 +165,12 @@ if erlang {
       uri_string
       |> uri.parse
       |> result.replace_error(400)
+
     try request =
       uri
       |> request.from_uri
       |> result.replace_error(400)
+
     headers
     |> list.fold(
       from: request,
@@ -238,32 +190,29 @@ if javascript {
       |> json.object
       |> json.to_string
 
-    [
-      "--experimental-fetch",
-      "--no-warnings",
-      "--eval",
+    let script =
       [
-        ["fetch('", uri_string, "', ", headers, ")"]
-        |> string.concat,
-        ".then((response) => response.status)",
-        ".catch(() => 503)",
-        ".then(console.log)",
-        ".then(() => process.exit(0))",
+        ["fetch('", uri_string, "', ", headers, ")"],
+        [".then((response) => response.status)"],
+        [".catch(() => 503)"],
+        [".then(console.log)"],
+        [".then(() => process.exit(0))"],
       ]
-      |> string.concat,
-    ]
-    |> javascript_run(opt: [])
-    |> result.replace_error(503)
-    |> result.then(apply: fn(status) {
-      assert Ok(status) =
-        status
-        |> string.trim
-        |> int.parse
-      case status < 400 {
-        True -> Ok(status)
-        False -> Error(status)
-      }
-    })
+      |> list.flatten
+      |> string.concat
+    try status =
+      ["--eval", script]
+      |> javascript_run(opt: [])
+      |> result.replace_error(503)
+
+    assert Ok(status) =
+      status
+      |> string.trim
+      |> int.parse
+    case status < 400 {
+      True -> Ok(status)
+      False -> Error(status)
+    }
   }
 }
 
@@ -271,7 +220,8 @@ if javascript {
 /// using the Erlang runtime.
 ///
 pub fn refuse_erlang() -> Result(String, Snag) {
-  snag.error("task cannot be run with erlang")
+  "task cannot be run with erlang"
+  |> snag.error
   |> snag.context("failed to run task")
 }
 
@@ -282,12 +232,12 @@ pub fn relay_flags(flags: flag.Map) -> List(String) {
   |> map.to_list
   |> list.filter_map(with: fn(flag) {
     let #(key, flag.Contents(value: value, ..)) = flag
-    let relay_flag = fn(value: a, fun) {
+    let relay_flag = fn(value: any, fun) {
       ["--", key, "=", fun(value)]
       |> string.concat
       |> Ok
     }
-    let relay_multiflag = fn(value: List(a), fun) {
+    let relay_multiflag = fn(value: List(any), fun) {
       list.map(_, with: fun)
       |> function.compose(string.join(_, with: ","))
       |> relay_flag(value, _)
@@ -304,7 +254,7 @@ pub fn relay_flags(flags: flag.Map) -> List(String) {
       flag.LI(value) -> relay_multiflag(value, int.to_string)
       flag.LS(value) -> relay_multiflag(value, function.identity)
       flag.S(value) -> relay_flag(value, function.identity)
-      _flag -> Error(Nil)
+      _else -> Error(Nil)
     }
   })
 }
@@ -347,17 +297,37 @@ pub fn rename(from source: String, to dest: String) -> Result(String, Snag) {
 }
 
 if erlang {
-  fn do_rename(source: String, dest: String) -> Result(Nil, file.Reason) {
+  fn do_rename(source: String, dest: String) -> Result(Dynamic, Dynamic) {
     source
     |> erlang_rename(dest)
-    |> posix_result
+    |> dynamic.any(of: [
+      fn(data) {
+        data
+        |> atom.from_dynamic
+        |> result.map(with: fn(atom) {
+          case atom == atom.create_from_string("ok") {
+            True ->
+              Nil
+              |> dynamic.from
+              |> Ok
+            False ->
+              atom
+              |> dynamic.from
+              |> Error
+          }
+        })
+      },
+      dynamic.result(ok: dynamic.dynamic, error: dynamic.dynamic),
+    ])
+    |> result.lazy_unwrap(or: fn() {
+      Nil
+      |> dynamic.from
+      |> Error
+    })
   }
 
   external fn erlang_rename(String, String) -> Dynamic =
     "file" "rename"
-
-  external fn posix_result(Dynamic) -> Result(Nil, file.Reason) =
-    "gleam_erlang_ffi" "posix_result"
 }
 
 if javascript {
@@ -374,7 +344,7 @@ pub fn style_flags(flags: flag.Map) -> StyleFlags {
     let flag.Contents(value: value, ..) = contents
     case value {
       flag.LS(_strings) -> True
-      _flag -> False
+      _else -> False
     }
   })
   |> map.map_values(with: fn(_key, contents) {
@@ -386,197 +356,22 @@ pub fn style_flags(flags: flag.Map) -> StyleFlags {
 
 /// TODO
 ///
-pub type Table =
-  Map(String, Dynamic)
-
-/// TODO
-///
-pub type Tables =
-  List(Table)
-
-/// TODO
-///
-pub fn table_item(
-  from table: Table,
-  get key: String,
-  expect decoder: Decoder(any),
-) -> Result(any, DecodeErrors) {
-  table
-  |> map.get(key)
-  |> result.replace_error([
-    DecodeError(expected: "any", found: "nothing", path: [key]),
-  ])
-  |> result.then(apply: decoder)
-}
-
-/// TODO
-///
-pub fn toml(
-  read file: String,
-  get key_path: List(String),
-  expect decoder: Decoder(any),
-) -> Result(any, Snag) {
-  case key_path == [] {
-    False ->
-      toml_read_file(file)
-      |> result.map_error(with: fn(_reason) {
-        ["failed to read `", file, "`"]
-        |> string.concat
-        |> snag.new
-      })
-      |> result.then(apply: function.compose(
-        toml_get(_, key_path),
-        result.replace_error(_, snag.new("key not found")),
-      ))
-      |> result.then(apply: function.compose(
-        decoder,
-        result.map_error(_, with: fn(decode_errors) {
-          let [head, ..rest] =
-            decode_errors
-            |> list.map(with: fn(error: DecodeError) {
-              string.concat([
-                "expected ",
-                error.expected,
-                " but found ",
-                error.found,
-                case error.path == [] {
-                  True -> ""
-                  False ->
-                    string.concat([
-                      " at `",
-                      string.join(error.path, with: "."),
-                      "`",
-                    ])
-                },
-              ])
-            })
-          rest
-          |> list.fold(from: snag.new(head), with: snag.layer)
-          |> snag.layer("failed to decode toml value")
-        }),
-      ))
-    True -> snag.error("key path not provided")
-  }
-}
-
-/// TODO
-///
-pub fn toml_get(parsed: Dynamic, key_path: List(String)) -> Result(Dynamic, Nil) {
-  do_toml_get(parsed, key_path)
-}
-
-if erlang {
-  fn do_toml_get(
-    parsed: Dynamic,
-    key_path: List(String),
-  ) -> Result(Dynamic, Nil) {
-    parsed
-    |> erlang_toml_get(key_path)
-    |> result.nil_error
-  }
-
-  external fn erlang_toml_get(Dynamic, List(String)) -> Result(Dynamic, Dynamic) =
-    "tomerl" "get"
-}
-
-if javascript {
-  external fn do_toml_get(Dynamic, List(String)) -> Result(Dynamic, Nil) =
-    "../rad_ffi.mjs" "toml_get"
-}
-
-/// TODO
-///
-pub fn toml_read_file(path: String) -> Result(Dynamic, Nil) {
-  do_toml_read_file(path)
-}
-
-if erlang {
-  fn do_toml_read_file(path: String) -> Result(Dynamic, Nil) {
-    path
-    |> erlang_toml_read_file
-    |> result.nil_error
-  }
-
-  external fn erlang_toml_read_file(String) -> Result(Dynamic, Dynamic) =
-    "tomerl" "read_file"
-}
-
-if javascript {
-  external fn do_toml_read_file(String) -> Result(Dynamic, Nil) =
-    "../rad_ffi.mjs" "toml_read_file"
-}
-
-/// TODO
-///
-pub fn toml_tables(
-  read file: String,
-  get path: List(String),
-  require keys: List(String),
-  include items: List(#(String, Dynamic)),
-) -> Result(Tables, Snag) {
-  let defaults = map.from_list(items)
-
-  file
-  |> toml(
-    get: path,
-    expect: dynamic.list(of: dynamic_table(of: dynamic.dynamic)),
-  )
-  |> result.map(with: list.map(_, with: fn(table) {
-    let table =
-      table
-      |> map.merge(into: defaults)
-    // Check for required keys
-    //
-    keys
-    |> list.filter_map(with: fn(key) {
-      case map.has_key(table, key) {
-        True -> Error(Nil)
-        False ->
-          [
-            "expected item with key `",
-            key,
-            "` in table `[[",
-            path
-            |> string.join(with: "."),
-            "]]`",
-          ]
-          |> string.concat
-          |> Ok
-      }
-    })
-    |> fn(errors) {
-      case errors == [] {
-        True -> Nil
-        False -> {
-          // Exit if any required key is missing
-          //
-          ["required item(s) not found in `", file, "`"]
-          |> string.concat
-          |> Snag(cause: errors)
-          |> snag.pretty_print
-          |> io.print
-          shellout.exit(1)
-        }
-      }
-    }
-    table
-  }))
-}
-
-/// TODO
-///
 pub fn which_rad() -> String {
   let or_try = fn(first, executable) {
     result.lazy_or(
       first,
       fn() {
-        let rad = string.concat([rad_path, "/priv/", executable])
-        shellout.command(run: rad, with: ["--version"], in: ".", opt: [])
+        let rad =
+          [rad_path, "/priv/", executable]
+          |> string.concat
+        ["--version"]
+        |> shellout.command(run: rad, in: ".", opt: [])
         |> result.replace(rad)
         |> result.nil_error
       },
     )
   }
+
   assert Ok(path) =
     "rad"
     |> shellout.which
