@@ -14,7 +14,7 @@ import gleam/string
 import gleam/uri.{Uri}
 import glint/flag
 import rad/toml
-import shellout.{CommandOpt, StyleFlags}
+import shellout.{CommandOpt, Lookups}
 import snag.{Snag}
 
 if erlang {
@@ -33,6 +33,23 @@ if javascript {
 
 /// TODO
 ///
+pub const lookups: Lookups = [
+  #(
+    ["color", "background"],
+    [
+      #("boi-blue", ["166", "240", "252"]),
+      #("buttercup", ["255", "215", "175"]),
+      #("hot-pink", ["217", "0", "184"]),
+      #("mint", ["182", "255", "234"]),
+      #("peach", ["255", "175", "194"]),
+      #("pink", ["255", "175", "243"]),
+      #("purple", ["217", "181", "255"]),
+    ],
+  ),
+]
+
+/// TODO
+///
 pub const rad_path = "./build/dev/javascript/rad"
 
 /// Results in the name of an installed dependency on success, or an error on
@@ -43,7 +60,7 @@ pub fn dependency(args: List(String)) -> Result(String, Snag) {
     args
     |> packages
     |> result.map_error(with: fn(_snag) {
-      ["dependency `", string.join(args, "."), "` not found"]
+      ["dependency `", string.join(args, with: "."), "` not found"]
       |> string.concat
       |> snag.new
     })
@@ -232,12 +249,12 @@ pub fn relay_flags(flags: flag.Map) -> List(String) {
   |> map.to_list
   |> list.filter_map(with: fn(flag) {
     let #(key, flag.Contents(value: value, ..)) = flag
-    let relay_flag = fn(value: any, fun) {
+    let relay_flag = fn(value: a, fun) {
       ["--", key, "=", fun(value)]
       |> string.concat
       |> Ok
     }
-    let relay_multiflag = fn(value: List(any), fun) {
+    let relay_multiflag = fn(value: List(a), fun) {
       list.map(_, with: fun)
       |> function.compose(string.join(_, with: ","))
       |> relay_flag(value, _)
@@ -333,25 +350,6 @@ if erlang {
 if javascript {
   external fn do_rename(String, String) -> Result(Nil, String) =
     "../rad_ffi.mjs" "rename"
-}
-
-/// Filters the style flags from a `glint.CommandInput.flags` record and
-/// converts the map into a `shellout.StyleFlags` map.
-///
-pub fn style_flags(flags: flag.Map) -> StyleFlags {
-  flags
-  |> map.filter(for: fn(_key, contents) {
-    let flag.Contents(value: value, ..) = contents
-    case value {
-      flag.LS(_strings) -> True
-      _else -> False
-    }
-  })
-  |> map.map_values(with: fn(_key, contents) {
-    let flag.Contents(value: value, ..) = contents
-    assert flag.LS(value) = value
-    value
-  })
 }
 
 /// TODO

@@ -29,7 +29,7 @@ tomerl = "~> 0.5"
 gleeunit = "~> 0.6"
 
 [rad]
-module = "rad"
+module = "rad/workbook/standard"
 targets = ["erlang", "javascript"]
 with = "javascript"
 

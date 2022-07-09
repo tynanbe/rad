@@ -1,15 +1,20 @@
+//// TODO
+////
+
 import gleam/bool
 import gleam/dynamic
 import gleam/function
 import gleam/io
 import gleam/list
+import gleam/map
 import gleam/result
 import gleam/string
 import glint.{Help, Out}
 import glint/flag
-import rad/task.{Tasks}
+import rad/task
 import rad/toml
 import rad/util
+import rad/workbook.{Workbook}
 import shellout.{LetBeStderr, LetBeStdout}
 import snag.{Snag}
 
@@ -20,24 +25,22 @@ if erlang {
 
 /// Runs `rad`, a flexible task runner companion for the `gleam` build manager.
 ///
-/// Specify a different `module` in the `[rad]` table of your `gleam.toml`
-/// config to have `rad` run your module's `main` function, in which you can
-/// call [`rad.do_main`](#do_main) to extend `rad` with your own tasks.
+/// Specify a different workbook `module` in the `[rad]` table of your
+/// `gleam.toml` config to have `rad` run your workbook's `main` function, in
+/// which you can call [`do_main`](#do_main) to extend `rad` with your own
+/// [`Workbook`](rad/workbook.html#Workbook).
 ///
 pub fn main() -> Nil {
   let toml =
     "gleam.toml"
     |> toml.parse_file
     |> result.lazy_unwrap(or: toml.new)
-  let module =
-    ["rad", "module"]
-    |> toml.decode(from: toml, expect: dynamic.string)
-    |> result.unwrap(or: "rad")
+
+  // Determine runtime
   let with =
     ["rad", "with"]
     |> toml.decode(from: toml, expect: dynamic.string)
     |> result.unwrap(or: "javascript")
-  // Try to run any task `with` a given runtime
   assert Ok(Out(with)) =
     glint.new()
     |> glint.add_command(
@@ -53,46 +56,46 @@ pub fn main() -> Nil {
       used: "",
     )
     |> glint.execute(arguments(True))
+
+  // Try to run any task `with` a given runtime
   rad_run(
     with,
     fn() {
-      case module {
-        "rad" -> do_main(task.tasks())
-        _else -> gleam_run(module)
-      }
+      ["rad", "module"]
+      |> toml.decode(from: toml, expect: dynamic.string)
+      |> result.unwrap(or: "rad/workbook/standard")
+      |> gleam_run
     },
   )
 }
 
 /// Applies arguments from the command line to the given
-/// [`Tasks`](rad/task.html#Tasks), then processes the output and exits.
+/// [`Workbook`](rad/workbook.html#Workbook), then processes the output and exits.
 ///
-/// You can merge `rad`'s [`task.Tasks`](rad/task.html#Tasks) with your own, or
-/// replace them entirely.
+/// You can merge `rad`'s
+/// [`standard.workbook`](rad/workbook/standard.html#workbook) with your own, or
+/// replace it entirely.
 ///
 /// See [`main`](#main) for more info.
 ///
-pub fn do_main(tasks: Tasks) -> Nil {
-  [
-    tasks,
-    task.tasks_from_config()
-    |> list.map(with: result.map_error(_, with: fn(snag) {
-      Snag(..snag, issue: "invalid `[[rad.tasks]]` in `gleam.toml`")
-      |> snag.pretty_print
-      |> string.trim
-      |> string.append(suffix: "\n")
-      |> io.println
-    }))
-    |> result.values,
-  ]
-  |> list.flatten
-  |> list.fold(
+pub fn do_main(workbook: Workbook) -> Nil {
+  task.tasks_from_config()
+  |> list.map(with: result.map_error(_, with: fn(snag) {
+    Snag(..snag, issue: "invalid `[[rad.tasks]]` in `gleam.toml`")
+    |> snag.pretty_print
+    |> string.trim
+    |> string.append(suffix: "\n")
+    |> io.println
+  }))
+  |> result.values
+  |> workbook.tasks(into: workbook)
+  |> map.fold(
     from: glint.new(),
-    with: fn(acc, task) {
+    with: fn(acc, path, task) {
       acc
       |> glint.add_command(
-        at: task.path,
-        do: task.run,
+        at: path,
+        do: task.run(_, task),
         with: task.flags,
         described: task.shortdoc,
         used: ["rad", ..task.path]
@@ -151,6 +154,7 @@ fn gleam_run(module: String) -> Nil {
 if erlang {
   fn do_gleam_run(module: String) -> Nil {
     module
+    |> string.replace(each: "/", with: "@")
     |> atom.create_from_string
     |> erlang_gleam_run
     Nil

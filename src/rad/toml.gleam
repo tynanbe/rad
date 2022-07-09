@@ -21,8 +21,8 @@ pub external type Toml
 pub fn decode(
   from toml: Toml,
   get key_path: List(String),
-  expect decoder: Decoder(any),
-) -> Result(any, Snag) {
+  expect decoder: Decoder(a),
+) -> Result(a, Snag) {
   try item =
     toml
     |> do_toml_get(key_path)
@@ -33,21 +33,7 @@ pub fn decode(
 
   item
   |> decoder
-  |> result.map_error(with: fn(decode_errors) {
-    let [head, ..rest] =
-      decode_errors
-      |> list.map(with: fn(error: DecodeError) {
-        let path = case error.path == [] {
-          False -> path_message(" at `", error.path, "`")
-          True -> ""
-        }
-        ["expected ", error.expected, " but found ", error.found, path]
-        |> string.concat
-      })
-    rest
-    |> list.fold(from: snag.new(head), with: snag.layer)
-    |> snag.layer(path_message("failed to decode item `", key_path, "`"))
-  })
+  |> result.map_error(with: decode_errors_to_snag(_, key_path))
 }
 
 if erlang {
@@ -71,8 +57,8 @@ if javascript {
 pub fn decode_every(
   from toml: Toml,
   get key_path: List(String),
-  expect decoder: Decoder(any),
-) -> Result(List(#(String, any)), Snag) {
+  expect decoder: Decoder(a),
+) -> Result(List(#(String, a)), Snag) {
   do_decode_every(toml, key_path, decoder)
 }
 
@@ -80,16 +66,14 @@ if erlang {
   fn do_decode_every(
     toml: Toml,
     key_path: List(String),
-    decoder: Decoder(any),
-  ) -> Result(List(#(String, any)), Snag) {
+    decoder: Decoder(a),
+  ) -> Result(List(#(String, a)), Snag) {
     try map =
       key_path
       |> decode(
         from: toml,
-        expect: function.compose(
-          dynamic.from,
-          dynamic.map(of: dynamic.string, to: dynamic.dynamic),
-        ),
+        expect: dynamic.from
+        |> function.compose(dynamic.map(of: dynamic.string, to: dynamic.dynamic)),
       )
 
     map
@@ -112,27 +96,37 @@ if erlang {
 }
 
 if javascript {
-  external fn do_decode_every(
+  fn do_decode_every(
     toml: Toml,
     key_path: List(String),
-    decoder: Decoder(any),
-  ) -> Result(List(#(String, any)), Snag) =
+    decoder: Decoder(a),
+  ) -> Result(List(#(String, a)), Snag) {
+    toml
+    |> javascript_decode_every(key_path, decoder)
+    |> result.map_error(with: decode_errors_to_snag(_, key_path))
+  }
+
+  external fn javascript_decode_every(
+    Toml,
+    List(String),
+    Decoder(a),
+  ) -> Result(List(#(String, a)), DecodeErrors) =
     "../rad_ffi.mjs" "toml_decode_every"
 }
 
 /// TODO
 ///
-pub fn encode_json(data: any) -> String {
+pub fn encode_json(data: a) -> String {
   do_encode_json(data)
 }
 
 if erlang {
-  external fn do_encode_json(any) -> String =
+  external fn do_encode_json(a) -> String =
     "thoas" "encode"
 }
 
 if javascript {
-  external fn do_encode_json(any) -> String =
+  external fn do_encode_json(a) -> String =
     "" "globalThis.JSON.stringify"
 }
 
@@ -203,6 +197,22 @@ if erlang {
 if javascript {
   external fn do_parse_file(String) -> Result(Dynamic, Nil) =
     "../rad_ffi.mjs" "toml_read_file"
+}
+
+fn decode_errors_to_snag(decode_errors: DecodeErrors, key_path: List(String)) {
+  let [head, ..rest] =
+    decode_errors
+    |> list.map(with: fn(error: DecodeError) {
+      let path = case error.path == [] {
+        False -> path_message(" at `", error.path, "`")
+        True -> ""
+      }
+      ["expected ", error.expected, " but found ", error.found, path]
+      |> string.concat
+    })
+  rest
+  |> list.fold(from: snag.new(head), with: snag.layer)
+  |> snag.layer(path_message("failed to decode item `", key_path, "`"))
 }
 
 fn path_message(prefix: String, path: List(String), suffix: String) -> String {

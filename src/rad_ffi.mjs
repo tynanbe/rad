@@ -33,7 +33,6 @@ export function ebin_paths() {
       ),
     );
   } catch {
-    // TODO: improve this?
     return new Error(Nil);
   }
 }
@@ -75,10 +74,9 @@ export function mjs_paths() {
           .filter((item) => is_directory(dist(item)))
           .map((subdir) => do_mjs_paths(dist(subdir)))
           .flat(),
-      ],),
+      ]),
     );
   } catch {
-    // TODO: improve this?
     return new Error(Nil);
   }
 }
@@ -91,7 +89,7 @@ function do_mjs_paths(prefix) {
       .map((item) => {
         let path = `${prefix}/${item.name}`;
         return item.isDirectory() ? do_mjs_paths(path) : path;
-      },)
+      })
       .flat()
       .filter((item) => item.endsWith(".mjs"))
   );
@@ -105,10 +103,10 @@ export function load_modules() {
       let name = item.replace(
         new RegExp(`^${re_prefix}/[^/]+/dist/(.*)[.]mjs$`),
         "$$$1",
-      ).replace("/", "$");
+      ).replaceAll("/", "$");
       item = item.replace(new RegExp(`^${re_prefix}`), "../..");
       return [name, item];
-    },)
+    })
     .forEach(
       (item) =>
         import(item[1]).then(
@@ -152,7 +150,7 @@ export function toml_decode_every(toml, key_path, decoder) {
     .map((key) => {
       let result = decoder(toml[key]);
       return [key, result.isOk() ? result[0] : Nil];
-    },)
+    })
     .filter(([_key, value]) => Nil !== value);
   return new Ok(toList(items));
 }
@@ -164,7 +162,6 @@ export function toml_get(parsed, key_path) {
     if (Nil !== value) {
       result = new Ok(value);
     } else {
-      // TODO: improve this?
       return new Error(Nil);
     }
   }
@@ -176,7 +173,6 @@ export function toml_read_file(pathname) {
     let content = fs.readFileSync(pathname, "utf-8");
     return new Ok(TOML.parse(content));
   } catch {
-    // TODO: improve this?
     return new Error(Nil);
   }
 }
@@ -200,7 +196,6 @@ export function working_directory() {
   try {
     return new Ok(process.cwd());
   } catch {
-    // TODO: improve this?
     return new Error(Nil);
   }
 }

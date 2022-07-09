@@ -1,402 +1,441 @@
+//// Tasks represent commands that can be invoked from the `rad` command line
+//// interface.
+////
+//// A collection of tasks that can be handled by
+//// [`rad.do_main`](../rad.html#do_main) is called a
+//// [`Workbook`](workbook.html#Workbook).
+////
+
+import gleam
 import gleam/dynamic
-import gleam/function
 import gleam/int
 import gleam/io
 import gleam/list
-import gleam/map
-import gleam/option.{None, Option, Some}
-import gleam/order.{Order}
-import gleam/pair
 import gleam/result
 import gleam/string
 import glint.{CommandInput}
 import glint/flag.{Flag}
-import rad/toml
-import rad/util.{rad_path}
-import shellout.{LetBeStderr, LetBeStdout, Lookups, StyleFlags}
+import rad/toml.{Toml}
+import rad/util
+import shellout.{LetBeStderr, LetBeStdout}
 import snag.{Snag}
 
-/// TODO
+/// The basic configuration unit for the `rad` command line interface.
 ///
-pub const ignore_glob = ".git|_build|build|deps|node_modules"
-
-/// TODO
+/// A `Task` can be conveniently built up using the following functions:
+/// [`new`](#new), followed by any number of [`shortdoc`](#shortdoc),
+/// [`flag`](#flag), [`flags`](#flags), [`parameter`](#parameter),
+/// [`parameters`](#parameters), [`with_config`](#with_config), and
+/// [`for`](#for) combined with [`arguments`](#arguments),
+/// [`targets`](#targets), or a custom [`Iterable`](#Iterable)-generating
+/// function.
 ///
-pub const lookups: Lookups = [
-  #(
-    ["color", "background"],
-    [
-      #("boi-blue", ["166", "240", "252"]),
-      #("buttercup", ["255", "215", "175"]),
-      #("hot-pink", ["217", "0", "184"]),
-      #("mint", ["182", "255", "234"]),
-      #("peach", ["255", "175", "194"]),
-      #("pink", ["255", "175", "243"]),
-      #("purple", ["217", "181", "255"]),
-    ],
-  ),
-]
-
-/// TODO
+/// Any number of tasks can be added to a [`new`](workbook.html#new) or existing
+/// [`Workbook`](workbook.html#Workbook), such as the standard
+/// [`workbook`](workbook/standard.html#workbook), to compose a custom
+/// [`Workbook`](workbook.html#Workbook) that can be given to
+/// [`rad.do_main`](../rad.html#do_main).
 ///
-pub const flag_color = "purple"
-
-/// TODO
-///
-pub const heading_color = "buttercup"
-
-/// TODO
-///
-pub const parameter_color = "mint"
-
-/// TODO
-///
-pub const path_color = "boi-blue"
-
-/// TODO
-///
-pub const subcommand_color = "mint"
-
-const tab = "    "
-
-/// TODO
-///
-pub type Task(any) {
+pub type Task(a) {
   Task(
     path: List(String),
-    run: fn(CommandInput) -> any,
-    flags: List(Flag),
+    run: Runner(a),
+    for: Iterable(a),
     shortdoc: String,
+    flags: List(Flag),
     parameters: List(#(String, String)),
+    config: Config,
   )
 }
 
-/// TODO
+/// A function that takes
+/// [`CommandInput`](https://hexdocs.pm/glint/glint.html#CommandInput) and a
+/// given [`Task`](#Task) and does any number of things with them.
 ///
-pub type TaskResult =
-  Result(String, Snag)
+pub type Runner(a) =
+  fn(CommandInput, Task(a)) -> a
 
-/// TODO
+/// A value for the `for` field of every [`Task`](#Task).
+///
+/// An `Iterable` tells a [`Runner`](#Runner) which items to iterate over and
+/// how input should be mapped at the beginning of each iteration.
+///
+/// A [`new`](#new) [`Task`](#Task) defined in a
+/// [`Workbook`](workbook.html#Workbook), will ask its [`Runner`](#Runner) to
+/// iterate `Once`. This can be changed using the [`for`](#for) builder
+/// function.
+///
+/// At runtime, when a [`Runner`](#Runner) sees that its [`Task`](#Task) needs
+/// to run for `Each` of any number of items, it can proceed accordingly. A
+/// [`trainer`](#trainer) does this for its [`Runner`](#Runner) automatically.
+///
+pub type Iterable(a) {
+  Each(
+    get: fn(CommandInput, Task(a)) -> List(String),
+    map: fn(CommandInput, Task(a), Int, List(String)) -> CommandInput,
+  )
+  Once
+}
+
+/// A value for the `config` field of every [`Task`](#Task).
+///
+/// A [`new`](#new) [`Task`](#Task) defined in a
+/// [`Workbook`](workbook.html#Workbook), won't ask its [`Runner`](#Runner) to
+/// access the `gleam.toml` configuration file (`NoConfig`). This can be changed
+/// using the [`with_config`](#with_config) builder function (`Config`).
+///
+/// At runtime, when a [`Runner`](#Runner) sees that its [`Task`](#Task) needs
+/// the [`Toml`](toml.html#Toml) data, it can fetch it once and use it as needed
+/// (`Parsed`). A [`trainer`](#trainer) does this for its [`Runner`](#Runner)
+/// automatically.
+///
+pub type Config {
+  Config
+  NoConfig
+  Parsed(Toml)
+}
+
+/// The standard return type for a [`Task`](#Task).
+///
+/// Contains a string of output on success, or a
+/// [`Snag`](https://hexdocs.pm/snag/snag.html#Snag) on failure.
+///
+pub type Result =
+  gleam.Result(String, Snag)
+
+/// A list in which each item is a [`Task`](#Task) that returns a
+/// [`Result`](#Result).
 ///
 pub type Tasks =
-  List(Task(TaskResult))
+  List(Task(Result))
 
-/// TODO
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+// Task Builder Functions                 //
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+
+/// Returns a new [`Task`](#Task) with the given `path` and `runner`, which is
+/// assisted by a [`trainer`](#trainer) to reduce boilerplate code for common
+/// scenarios.
 ///
-pub fn tasks() -> Tasks {
-  let style_flags = [
-    flag.strings(
-      called: "display",
-      default: ["bold"],
-      explained: "Set display styles",
-    ),
-    flag.strings(
-      called: "color",
-      default: ["pink"],
-      explained: "Set a foreground color",
-    ),
-    flag.strings(
-      called: "background",
-      default: [],
-      explained: "Set a background color",
-    ),
-  ]
-
-  let toml =
-    "gleam.toml"
-    |> toml.parse_file
-    |> result.lazy_unwrap(or: toml.new)
-  let target_flags = [
-    ["rad", "targets"]
-    |> toml.decode(from: toml, expect: dynamic.list(of: dynamic.string))
-    |> result.lazy_or(fn() {
-      ["target"]
-      |> toml.decode(from: toml, expect: dynamic.string)
-      |> result.map(with: fn(target) { [target] })
-    })
-    |> result.unwrap(or: ["erlang"])
-    |> flag.strings(called: "target", explained: "The platform(s) to target"),
-  ]
-
-  let docs_flags = [
-    flag.bool(
-      called: "all",
-      default: False,
-      explained: "Build docs for all packages",
-    ),
-  ]
-
-  let watch_flags = [
-    flag.bool(
-      called: "no-docs",
-      default: False,
-      explained: "Disable docs handling",
-    ),
-    flag.int(
-      called: "port",
-      default: 7000,
-      explained: "Request live reloads over port (default 7000)",
-    ),
-    ..target_flags
-  ]
-
-  [
-    Task(
-      path: [],
-      run: root,
-      flags: [
-        flag.bool(
-          called: "version",
-          default: False,
-          explained: "Print rad's version",
-        ),
-      ],
-      shortdoc: "",
-      parameters: [],
-    ),
-    Task(
-      path: ["add"],
-      run: gleam(["add"], _),
-      flags: [
-        flag.bool(
-          called: "dev",
-          default: False,
-          explained: "Add the packages as dev-only dependencies",
-        ),
-      ],
-      shortdoc: "Add a new project dependency",
-      parameters: [#("..<packages>", "Name(s) of Hex package(s)")],
-    ),
-    Task(
-      path: ["build"],
-      run: multitarget(gleam(["build"], _), _),
-      flags: [
-        flag.bool(
-          called: "warnings-as-errors",
-          default: False,
-          explained: "Emit compile time warnings as errors",
-        ),
-        ..target_flags
-      ],
-      shortdoc: "Build the project",
-      parameters: [],
-    ),
-    Task(
-      path: ["check"],
-      run: gleam(["check"], _),
-      flags: [],
-      shortdoc: "Type check the project",
-      parameters: [],
-    ),
-    Task(
-      path: ["clean"],
-      run: gleam(["clean"], _),
-      flags: [],
-      shortdoc: "Clean build artifacts",
-      parameters: [],
-    ),
-    Task(
-      path: ["config"],
-      run: config,
-      flags: [],
-      shortdoc: "Print project config values",
-      parameters: [#("<path>", "TOML breadcrumb(s), space-separated")],
-    ),
-    Task(
-      path: ["deps"],
-      run: help(tasks(), ["deps"], _),
-      flags: [],
-      shortdoc: "Work with dependency packages",
-      parameters: [],
-    ),
-    Task(
-      path: ["deps", "list"],
-      run: gleam(["deps", "list"], _),
-      flags: [],
-      shortdoc: "List dependency packages",
-      parameters: [],
-    ),
-    Task(
-      path: ["docs"],
-      run: help(tasks(), ["docs"], _),
-      flags: [],
-      shortdoc: "Work with HTML documentation",
-      parameters: [],
-    ),
-    Task(
-      path: ["docs", "build"],
-      run: docs_build,
-      flags: docs_flags,
-      shortdoc: "Render HTML documentation",
-      parameters: [
-        #("..[packages]", "Package name(s) (default: current project)"),
-      ],
-    ),
-    Task(
-      path: ["docs", "serve"],
-      run: docs_serve,
-      flags: [
-        flag.string(
-          called: "host",
-          default: "localhost",
-          explained: "Bind to host (default localhost)",
-        ),
-        flag.bool(
-          called: "no-live",
-          default: False,
-          explained: "Disable live reloading",
-        ),
-        flag.int(
-          called: "port",
-          default: 7000,
-          explained: "Listen on port (default 7000)",
-        ),
-        ..docs_flags
-      ],
-      shortdoc: "Serve HTML documentation",
-      parameters: [
-        #(
-          "..[packages]",
-          "Package name(s) to build docs for (default: current project)",
-        ),
-      ],
-    ),
-    Task(
-      path: ["format"],
-      run: format,
-      flags: [
-        flag.bool(
-          called: "check",
-          default: False,
-          explained: "Check if inputs are formatted without changing them",
-        ),
-      ],
-      shortdoc: "Format source code",
-      parameters: [#("..[files]", "Files to format (default: .)")],
-    ),
-    Task(
-      path: ["help"],
-      run: help(tasks(), ["help"], _),
-      flags: [],
-      shortdoc: "Print help information",
-      parameters: [
-        #("[subcommand]", "Subcommand breadcrumb(s), space-separated"),
-      ],
-    ),
-    Task(
-      path: ["name"],
-      run: name,
-      flags: style_flags,
-      shortdoc: "Print a package name",
-      parameters: [#("[package]", "Package name (default: current project)")],
-    ),
-    Task(
-      path: ["origin"],
-      run: origin,
-      flags: [],
-      shortdoc: "Print the repository URL",
-      parameters: [],
-    ),
-    Task(
-      path: ["shell"],
-      run: shell,
-      flags: [],
-      shortdoc: "Start a shell",
-      parameters: [
-        #(
-          "[runtime]",
-          "Runtime name or alias (default: erl; options: erl, iex, node)",
-        ),
-      ],
-    ),
-    Task(
-      path: ["test"],
-      run: multitarget(gleam(["test"], _), _),
-      flags: target_flags,
-      shortdoc: "Run the project tests",
-      parameters: [],
-    ),
-    Task(
-      path: ["tree"],
-      run: tree,
-      flags: [],
-      shortdoc: "Print the file structure",
-      parameters: [],
-    ),
-    Task(
-      path: ["version"],
-      run: version,
-      flags: [
-        flag.bool(
-          called: "bare",
-          default: False,
-          explained: "Omit the package name",
-        ),
-        ..style_flags
-      ],
-      shortdoc: "Print a package version",
-      parameters: [#("[package]", "Package name (default: current project)")],
-    ),
-    Task(
-      path: ["watch"],
-      run: watch,
-      flags: watch_flags,
-      shortdoc: "Automate the project tests",
-      parameters: [],
-    ),
-    Task(
-      path: ["watch", "do"],
-      run: watch_do,
-      flags: watch_flags,
-      shortdoc: "",
-      parameters: [],
-    ),
-  ]
-}
-
-/// TODO
+/// The `path` is a list of words that, when given in sequence using `rad`'s
+/// command line interface, invoke the [`Task`](#Task), which will then be
+/// processed together with any other input arguments and run by the `runner`.
+/// For example, if `rad` is invoked from the command line with
+/// `rad hearts gleam`, it will try to run a [`Task`](#Task) with the `path`:
+/// `["hearts", "gleam"]`.
 ///
-pub fn tasks_from_config() -> List(Result(Task(TaskResult), Snag)) {
-  let shortdoc = ""
-  let dynamic_strings = fn(name) {
-    dynamic.field(named: name, of: dynamic.list(of: dynamic.string))
-  }
-  let requirements =
-    fn(path, run) {
-      Task(
-        path: path,
-        run: user(run, _),
-        flags: [],
-        shortdoc: shortdoc,
-        parameters: [],
-      )
-    }
-    |> dynamic.decode2(dynamic_strings("path"), dynamic_strings("run"))
-
-  "gleam.toml"
-  |> toml.parse_file
-  |> result.lazy_unwrap(or: toml.new)
-  |> toml.decode(
-    get: ["rad", "tasks"],
-    expect: dynamic.list(of: toml.from_dynamic),
+pub fn new(at path: List(String), run runner: Runner(Result)) -> Task(Result) {
+  Task(
+    path: path,
+    run: trainer(runner),
+    for: Once,
+    shortdoc: "",
+    flags: [],
+    parameters: [],
+    config: NoConfig,
   )
-  |> result.unwrap(or: [])
-  |> list.map(with: fn(toml) {
-    try task =
-      []
-      |> toml.decode(from: toml, expect: requirements)
-    let shortdoc =
-      ["shortdoc"]
-      |> toml.decode(from: toml, expect: dynamic.string)
-      |> result.unwrap(or: shortdoc)
-    Task(..task, shortdoc: shortdoc)
-    |> Ok
-  })
 }
+
+/// Returns a new [`Task`](#Task) with the given input
+/// [`Flag`](https://hexdocs.pm/glint/glint/flag.html#Flag) appended.
+///
+/// A [`Flag`](https://hexdocs.pm/glint/glint/flag.html#Flag) defines an
+/// optional argument that its [`Task`](#Task) accepts from command line input.
+///
+pub fn flag(
+  into task: Task(a),
+  called name: String,
+  explained description: String,
+  expect flag_fun: fn(String, b, String) -> Flag,
+  default value: b,
+) -> Task(a) {
+  let flag =
+    name
+    |> flag_fun(value, description)
+  let flags =
+    task.flags
+    |> list.append([flag])
+  Task(..task, flags: flags)
+}
+
+/// Returns a new [`Task`](#Task) with the given list of input flags appended.
+///
+/// A [`Flag`](https://hexdocs.pm/glint/glint/flag.html#Flag) defines an
+/// optional argument that its [`Task`](#Task) accepts from command line input.
+///
+pub fn flags(into task: Task(a), add flags: List(Flag)) -> Task(a) {
+  let flags =
+    task.flags
+    |> list.append(flags)
+  Task(..task, flags: flags)
+}
+
+/// Returns a new [`Task`](#Task) with the given `iter_fun`, a function that
+/// returns an [`Iterable`](#Iterable) telling the [`Runner`](#Runner) which
+/// items to iterate over and how input should be mapped at the beginning of
+/// each iteration.
+///
+pub fn for(do task: Task(a), each iter_fun: fn() -> Iterable(a)) -> Task(a) {
+  Task(..task, for: iter_fun())
+}
+
+/// Returns a new [`Task`](#Task) with the given parameter documentation
+/// appended.
+///
+/// Parameter docs are used by the [`help`](workbook.html#help) function to
+/// describe what extra arguments do for a given [`Task`](#Task).
+///
+pub fn parameter(
+  into task: Task(a),
+  with usage: String,
+  of description: String,
+) -> Task(a) {
+  let parameters =
+    task.parameters
+    |> list.append([#(usage, description)])
+  Task(..task, parameters: parameters)
+}
+
+/// Returns a new [`Task`](#Task) with the given list of parameter documentation
+/// pairs appended.
+///
+/// Parameter docs are used by the [`help`](workbook.html#help) function to
+/// describe what extra arguments do for a given [`Task`](#Task).
+///
+pub fn parameters(
+  into task: Task(a),
+  add parameters: List(#(String, String)),
+) -> Task(a) {
+  let parameters =
+    task.parameters
+    |> list.append(parameters)
+  Task(..task, parameters: parameters)
+}
+
+/// Returns a new [`Task`](#Task) with the given short documentation string.
+///
+pub fn shortdoc(into task: Task(a), insert description: String) -> Task(a) {
+  Task(..task, shortdoc: description)
+}
+
+/// Returns a new [`Task`](#Task) that wants the `gleam.toml` configuration
+/// file's [`Parsed`](#Config) [`Toml`](toml.html#Toml) data, to be used by the
+/// [`Task`](#Task)'s [`Runner`](#Runner).
+///
+/// Note that a [`Runner`](#Runner) will need to handle this requirement at
+/// runtime in order to succeed. A [`trainer`](#trainer) does this for its
+/// [`Runner`](#Runner) automatically.
+///
+pub fn with_config(task: Task(a)) -> Task(a) {
+  Task(..task, config: Config)
+}
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+// Iterable Functions                     //
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+
+/// Returns an [`Iterable`](#Iterable) that tells a [`Runner`](#Runner) how to
+/// run for each of a list of input arguments.
+///
+/// An [`Iterable`](#Iterable) can be attached to a given [`Task`](#Task) using
+/// the [`for`](#for) builder function.
+///
+pub fn arguments() -> Iterable(a) {
+  let items_fun = fn(input: CommandInput, _task) { input.args }
+
+  let mapper = fn(input, _task, _index, argument) {
+    CommandInput(..input, args: argument)
+  }
+
+  Each(get: items_fun, map: mapper)
+}
+
+/// Returns an [`Iterable`](#Iterable) that tells a [`Runner`](#Runner) how to
+/// run for each of a list of targets.
+///
+/// An [`Iterable`](#Iterable) can be attached to a given [`Task`](#Task) using
+/// the [`for`](#for) builder function.
+///
+pub fn targets() -> Iterable(a) {
+  let items_fun = fn(input: CommandInput, _task) {
+    assert Ok(flag.LS(targets)) =
+      "target"
+      |> flag.get_value(from: input.flags)
+    targets
+    |> list.unique
+  }
+
+  let mapper = fn(input: CommandInput, _task, index, target) {
+    let target = case target {
+      [target] -> target
+      _else -> ""
+    }
+    case index {
+      0 -> Nil
+      _else -> io.println("")
+    }
+    let _heading =
+      [
+        "  Targeting"
+        |> shellout.style(with: shellout.color(["magenta"]), custom: []),
+        " ",
+        target,
+        "...",
+      ]
+      |> string.concat
+      |> io.println
+    assert Ok(flags) =
+      ["--target=", target]
+      |> string.concat
+      |> flag.update_flags(in: input.flags)
+    CommandInput(..input, flags: flags)
+  }
+
+  Each(get: items_fun, map: mapper)
+}
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+// Task Runner Functions                  //
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+
+/// Returns a basic [`Runner`](#Runner) that runs its [`Task`](#Task) using the
+/// given `command`.
+///
+/// Basic runners are used for tasks defined in `gleam.toml`.
+///
+pub fn basic(command: List(String)) -> Runner(Result) {
+  fn(input: CommandInput, _task) {
+    let [command, ..args] = command
+    [args, util.relay_flags(input.flags), input.args]
+    |> list.flatten
+    |> shellout.command(run: command, in: ".", opt: [LetBeStderr, LetBeStdout])
+    |> result.replace_error(snag.new("task failed"))
+  }
+}
+
+/// Returns a [`Runner`](#Runner) that runs the `gleam` build tool with the
+/// given `arguments`.
+///
+/// Gleam runners can be used for tasks defined in a
+/// [`Workbook`](workbook.html#Workbook).
+///
+pub fn gleam(arguments: List(String)) -> Runner(Result) {
+  fn(input: CommandInput, _task) {
+    [arguments, util.relay_flags(input.flags), input.args]
+    |> list.flatten
+    |> shellout.command(run: "gleam", in: ".", opt: [LetBeStderr, LetBeStdout])
+    |> result.replace("")
+    |> result.replace_error(snag.new("task failed"))
+  }
+}
+
+/// Returns a [`Runner`](#Runner) that works with a given `runner` to run its
+/// [`Task`](#Task) one or more times.
+///
+/// If the [`Task`](#Task) contains an [`Iterable`](#Iterable), all runs are
+/// attempted regardless of any failures along the way; however, the end
+/// [`Result`](#Result) will only be successful if no errors are produced.
+///
+/// Trainer runners are used for tasks defined in a
+/// [`Workbook`](workbook.html#Workbook).
+///
+pub fn trainer(runner: Runner(Result)) -> Runner(Result) {
+  fn(input, task: Task(Result)) {
+    let config = case task.config {
+      Config ->
+        "gleam.toml"
+        |> toml.parse_file
+        |> result.lazy_unwrap(or: toml.new)
+        |> Parsed
+      _else -> task.config
+    }
+    let task = Task(..task, config: config)
+
+    let #(items, mapper) = case task.for {
+      Each(get: items_fun, map: mapper) -> #(items_fun(input, task), mapper)
+      Once -> #([], fn(input, _task, _index, _target) { input })
+    }
+    let is_aggregate = case items {
+      [_at_least, _two, ..] -> True
+      _else -> False
+    }
+
+    let #(oks, errors) =
+      case items {
+        [] -> {
+          let result =
+            input
+            |> mapper(task, 0, input.args)
+            |> runner(task)
+          [result]
+        }
+        _else ->
+          items
+          |> list.index_map(with: fn(index, item) {
+            let result =
+              input
+              |> mapper(task, index, [item])
+              |> runner(task)
+            case is_aggregate, result {
+              True, Ok(output) if output != "" -> {
+                let _print =
+                  output
+                  |> string.trim
+                  |> io.println
+                Ok("")
+              }
+              True, Error(snag) -> {
+                let _print =
+                  snag
+                  |> snag.pretty_print
+                  |> string.trim
+                  |> io.println
+                result
+              }
+              _else, _any -> result
+            }
+          })
+      }
+      |> list.partition(with: result.is_ok)
+
+    // Combine results
+    case oks, errors {
+      [], [error] -> error
+      _any, [] ->
+        oks
+        |> result.values
+        |> string.join(with: "\n")
+        |> Ok
+      _else, _any -> {
+        io.println("")
+        let errors = list.length(of: errors)
+        let results =
+          [errors, list.length(of: oks)]
+          |> int.sum
+          |> int.to_string
+        [
+          errors
+          |> int.to_string,
+          "of",
+          results,
+          "task items failed",
+        ]
+        |> string.join(with: " ")
+        |> snag.new
+        |> Error
+      }
+    }
+    |> result.map(with: string.trim)
+  }
+}
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+// Miscellaneous Functions                //
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
 /// Sort [`Tasks`](#Tasks) alphabetically by `path`.
 ///
-pub fn sort_tasks(tasks: Tasks) -> Tasks {
+pub fn sort(tasks: Tasks) -> Tasks {
   list.sort(
     tasks,
     by: fn(a, b) {
@@ -421,985 +460,40 @@ fn remove_common_path(a: List(String), b: List(String)) -> #(String, String) {
   }
 }
 
-/// TODO
+/// Parses `gleam.toml` for tasks defined in the `[[rad.tasks]]` table array.
 ///
-pub fn config(input: CommandInput) -> TaskResult {
-  try toml =
-    "gleam.toml"
-    |> toml.parse_file
-
-  input.args
-  |> toml.decode(from: toml, expect: dynamic.dynamic)
-  |> result.map(with: toml.encode_json)
-}
-
-/// TODO
-/// TODO: split out `do_docs_build`, wrap in `multitask`
+/// A defined [`Task`](#Task) must have `path` and `run` key/values, and may
+/// optionally have a `shortdoc` key/value.
 ///
-pub fn docs_build(input: CommandInput) -> TaskResult {
-  assert Ok(flag.B(all)) =
-    "all"
-    |> flag.get_value(from: input.flags)
-  let input = case all {
-    True -> {
-      // Prepare to build documentation for all Gleam dependencies
-      assert Ok(flags) =
-        "--all=false"
-        |> flag.update_flags(in: input.flags)
-      let toml =
-        "gleam.toml"
-        |> toml.parse_file
-        |> result.lazy_unwrap(or: toml.new)
-      let dependencies =
-        ["dependencies"]
-        |> toml.decode_every(from: toml, expect: dynamic.string)
-        |> result.unwrap(or: [])
-      let dev_dependencies =
-        ["dev-dependencies"]
-        |> toml.decode_every(from: toml, expect: dynamic.string)
-        |> result.unwrap(or: [])
-      [dependencies, dev_dependencies]
-      |> list.flatten
-      |> list.map(with: pair.first)
-      |> list.unique
-      |> list.filter(for: fn(name) { // Gleam packages only
-        //
-        ["./build/packages/", name, "/gleam.toml"]
-        |> string.concat
-        |> util.is_file })
-      |> function.tap(fn(dependencies) {
-        case dependencies {
-          [] -> Nil
-          _else -> {
-            // Build documentation for the base project too
-            []
-            |> CommandInput(flags: flags)
-            |> docs_build
-            io.println("")
-          }
-        }
-      })
-      |> CommandInput(flags: flags)
-    }
-    False -> input
-  }
-  let args = input.args
-  let extra_args = case args {
-    [_, ..args] if args != [] -> Some(args)
-    _else -> None
-  }
-  try #(name, path) = case extra_args {
-    None if args == [] ->
-      #("", ".")
-      |> Ok
-    _else ->
-      args
-      |> list.take(up_to: 1)
-      |> util.dependency
-      |> result.map(with: fn(name) {
-        #(name, string.concat(["./build/packages/", name]))
-      })
-  }
-  let result =
-    shellout.command(
-      run: "gleam",
-      with: ["docs", "build"],
-      in: path,
-      opt: [LetBeStderr, LetBeStdout],
-    )
-    |> result.replace_error(snag.new("task failed"))
-    |> result.then(apply: fn(_output) {
-      case path {
-        "." -> Ok("")
-        _else -> {
-          let new_path =
-            ["./build/dev/docs/", name]
-            |> string.concat
-          try _result = util.recursive_delete(new_path)
-          [path, "/build/dev/docs/", name]
-          |> string.concat
-          |> util.rename(to: new_path)
-        }
-      }
-    })
-  case extra_args {
-    Some(args) -> {
-      io.println("")
-      CommandInput(..input, args: args)
-      |> docs_build
-    }
-    None -> result
-  }
-}
-
-/// TODO
-///
-pub fn docs_serve(input: CommandInput) -> TaskResult {
-  try _output = docs_build(input)
-
-  io.println("")
-
-  assert Ok(flag.S(host)) =
-    "host"
-    |> flag.get_value(from: input.flags)
-  assert Ok(flags) = case host {
-    "localhost" ->
-      "--host=127.0.0.1"
-      |> flag.update_flags(in: input.flags)
-    _else -> Ok(input.flags)
-  }
-
-  [
-    [
-      [rad_path, "/priv/node_modules/wonton/src/bin.js"]
-      |> string.concat,
-    ],
-    util.relay_flags(flags),
-    ["--", "./build/dev/docs"],
-  ]
-  |> list.flatten
-  |> util.javascript_run(opt: [LetBeStderr, LetBeStdout])
-  |> result.replace("")
-}
-
-/// TODO
-///
-pub type Formatter {
-  Formatter(name: String, check: List(String), run: List(String))
-}
-
-/// TODO
-///
-pub fn format(input: CommandInput) -> TaskResult {
-  let formatters = [
-    Formatter(
-      name: "gleam",
-      check: ["gleam", "format", "--check"],
-      run: ["gleam", "format"],
-    ),
-    ..formatters_from_config()
-    |> list.map(with: result.map_error(_, with: fn(snag) {
-      Snag(..snag, issue: "invalid `[[rad.formatters]]` in `gleam.toml`")
-      |> snag.pretty_print
-      |> string.trim
-      |> string.append(suffix: "\n")
-      |> io.println
-    }))
-    |> result.values
-  ]
-
-  assert Ok(flag.B(check)) =
-    "check"
-    |> flag.get_value(from: input.flags)
-  let #(action, extra, failure) = case check {
-    True -> #("   Checking", " formatting", "format check")
-    False -> #(" Formatting", "", "formatting")
-  }
-
-  let errors =
-    formatters
-    |> list.filter_map(with: fn(formatter) {
-      [
-        action
-        |> shellout.style(with: shellout.color(["magenta"]), custom: lookups),
-        " ",
-        formatter.name,
-        extra,
-        "...",
-      ]
-      |> string.concat
-      |> io.println
-      let command = case check {
-        True -> formatter.check
-        False -> formatter.run
-      }
-      let result =
-        CommandInput(..input, flags: map.new())
-        |> user(command, _)
-        |> result.map_error(with: fn(_snag) {
-          string.concat(["`", formatter.name, "` formatter failed"])
-        })
-      case result {
-        Ok(_output) -> Error(Nil)
-        Error(message) -> Ok(message)
-      }
-    })
-  case errors {
-    [] -> Ok("")
-    _else -> {
-      io.println("")
-      [failure, " failed"]
-      |> string.concat
-      |> Snag(cause: errors)
-      |> Error
-    }
-  }
-}
-
-/// TODO
-///
-pub fn formatters_from_config() -> List(Result(Formatter, Snag)) {
+pub fn tasks_from_config() -> List(gleam.Result(Task(Result), Snag)) {
   let dynamic_strings = fn(name) {
     dynamic.field(named: name, of: dynamic.list(of: dynamic.string))
   }
   let requirements =
-    Formatter
-    |> dynamic.decode3(
-      dynamic.field(named: "name", of: dynamic.string),
-      dynamic_strings("check"),
-      dynamic_strings("run"),
-    )
+    fn(path, command) {
+      path
+      |> new(run: basic(command))
+    }
+    |> dynamic.decode2(dynamic_strings("path"), dynamic_strings("run"))
 
   "gleam.toml"
   |> toml.parse_file
   |> result.lazy_unwrap(or: toml.new)
   |> toml.decode(
-    get: ["rad", "formatters"],
+    get: ["rad", "tasks"],
     expect: dynamic.list(of: toml.from_dynamic),
   )
   |> result.unwrap(or: [])
-  |> list.map(with: toml.decode(from: _, get: [], expect: requirements))
-}
-
-/// TODO
-///
-pub fn gleam(path: List(String), input: CommandInput) -> TaskResult {
-  [path, util.relay_flags(input.flags), input.args]
-  |> list.flatten
-  |> shellout.command(run: "gleam", in: ".", opt: [LetBeStderr, LetBeStdout])
-  |> result.replace("")
-  |> result.replace_error(snag.new("task failed"))
-}
-
-/// Builds help dialogues for the given [`Tasks`](#Tasks) and any subtasks.
-///
-/// Any [`Task`](#Task) with an empty `shortdoc` field, or for which no parent
-/// [`Task`](#Task) exists, is hidden from ancestor help dialogues, but can be
-/// viewed directly.
-///
-pub fn help(tasks: Tasks, path: List(String), input: CommandInput) -> TaskResult {
-  let path = case path {
-    ["help"] -> input.args
-    _else -> path
-  }
-
-  let tasks =
-    [tasks, result.values(tasks_from_config())]
-    |> list.flatten
-
-  try task =
-    tasks
-    |> list.find(one_that: fn(task) { task.path == path })
-    |> result.replace_error(snag.new("rad task not found"))
-
-  // Get subtasks
-  let tasks =
-    tasks
-    |> list.filter_map(with: fn(task) {
-      let #(compare_path, subpath) =
-        task.path
-        |> list.split(at: list.length(path))
-      case path == compare_path && list.length(subpath) == 1 && task.shortdoc != "" {
-        True ->
-          Task(..task, path: subpath)
-          |> Ok
-        False -> Error(Nil)
-      }
-    })
-
-  let has_flags = task.flags != []
-  let has_parameters = task.parameters != []
-  let has_tasks = tasks != []
-
-  try info = info()
-  let info = Some(info)
-
-  let description = case task.shortdoc {
-    "" -> None
-    _else -> {
-      let description =
-        [tab, task.shortdoc]
-        |> string.concat
-      [heading("Description"), description]
-      |> string.join(with: "\n")
-      |> Some
-    }
-  }
-
-  let path = case path {
-    [] -> None
-    _else ->
-      path
-      |> string.join(with: " ")
-      |> shellout.style(
-        with: shellout.display(["bold"])
-        |> map.merge(shellout.color([path_color])),
-        custom: lookups,
-      )
-      |> Some
-  }
-
-  let subcommand = case has_tasks {
-    True ->
-      "<subcommand>"
-      |> shellout.style(
-        with: shellout.color([subcommand_color]),
-        custom: lookups,
-      )
-      |> Some
-    False -> None
-  }
-
-  let flags = case has_flags {
-    True ->
-      "[flags]"
-      |> shellout.style(with: shellout.color([flag_color]), custom: lookups)
-      |> Some
-    False -> None
-  }
-
-  let parameters = case has_parameters {
-    True ->
-      task.parameters
-      |> list.map(with: pair.first)
-      |> string.join(with: " ")
-      |> shellout.style(
-        with: shellout.color([parameter_color]),
-        custom: lookups,
-      )
-      |> Some
-    False -> None
-  }
-
-  let usage =
-    "rad"
-    |> shellout.style(
-      with: shellout.display(["bold"])
-      |> map.merge(shellout.color(["pink"])),
-      custom: lookups,
-    )
-    |> Some
-  let usage =
-    [usage, path, subcommand, flags, parameters]
-    |> option.values
-    |> string.join(with: " ")
-    |> string.append(tab, suffix: _)
-  let usage =
-    [heading("Usage"), usage]
-    |> string.join(with: "\n")
-    |> Some
-
-  let parameters =
-    "Parameters"
-    |> section(
-      when: has_parameters,
-      enum: task.parameters,
-      with: function.identity,
-      styled: shellout.color([parameter_color]),
-      sorted: fn(_a, _b) { order.Eq },
-    )
-
-  let flags =
-    "Flags"
-    |> section(
-      when: has_flags,
-      enum: task.flags,
-      with: fn(flag) {
-        let #(name, contents) = flag
-        let name =
-          [flag.prefix, name]
-          |> string.concat
-        #(name, contents.description)
-      },
-      styled: shellout.color([flag_color]),
-      sorted: string.compare,
-    )
-
-  let subcommands =
-    "Subcommands"
-    |> section(
-      when: has_tasks,
-      enum: tasks,
-      with: fn(task) {
-        let [name] = task.path
-        #(name, task.shortdoc)
-      },
-      styled: shellout.color([subcommand_color]),
-      sorted: string.compare,
-    )
-
-  [info, description, usage, parameters, flags, subcommands]
-  |> option.values
-  |> string.join(with: "\n\n")
-  |> Ok
-}
-
-/// Gathers and formats information about `rad`.
-///
-pub fn info() -> TaskResult {
-  // Check if `rad` is the base project or a dependency
-  try toml =
-    "gleam.toml"
-    |> toml.parse_file
-  try project_name =
-    ["name"]
-    |> toml.decode(from: toml, expect: dynamic.string)
-  try toml = case project_name {
-    "rad" -> Ok(toml)
-    _else ->
-      "build/packages/rad/gleam.toml"
-      |> toml.parse_file
-  }
-
-  let name =
-    "rad"
-    |> shellout.style(
-      with: shellout.display(["bold", "italic"])
-      |> map.merge(shellout.color(["pink"])),
-      custom: lookups,
-    )
-    |> Some
-
-  let version =
-    ["version"]
-    |> toml.decode(from: toml, expect: dynamic.string)
-    |> result.map(with: shellout.style(
-      _,
-      with: shellout.display(["italic"]),
-      custom: lookups,
-    ))
-    |> option.from_result
-
-  let description =
-    ["description"]
-    |> toml.decode(from: toml, expect: dynamic.string)
-    |> result.map(with: shellout.style(
-      _,
-      with: shellout.display(["italic"])
-      |> map.merge(shellout.color(["purple"])),
-      custom: lookups,
-    ))
-    |> option.from_result
-
-  [
-    [name, version]
-    |> option.values
-    |> string.join(with: " ")
-    |> Some,
-    [Some(""), description]
-    |> option.all
-    |> option.map(with: string.join(_, with: tab)),
-  ]
-  |> option.values
-  |> string.join(with: "\n")
-  |> Ok
-}
-
-/// TODO
-///
-pub fn heading(name: String) -> String {
-  name
-  |> shellout.style(
-    with: shellout.display(["bold"])
-    |> map.merge(shellout.color([heading_color])),
-    custom: lookups,
-  )
-}
-
-/// TODO
-///
-pub fn section(
-  named name: String,
-  when cond: Bool,
-  enum items: List(any),
-  with format_fun: fn(any) -> #(String, String),
-  styled style: StyleFlags,
-  sorted order_by: fn(String, String) -> Order,
-) -> Option(String) {
-  case cond {
-    True -> {
-      let items =
-        items
-        |> list.map(with: format_fun)
-      let width =
-        items
-        |> list.fold(
-          from: 0,
-          with: fn(acc, item) {
-            let length = string.length(item.0)
-            case length > acc {
-              True -> length
-              False -> acc
-            }
-          },
-        )
-      [
-        heading(name),
-        ..items
-        |> list.map(with: fn(item) {
-          let name =
-            item.0
-            |> string.pad_right(to: width, with: " ")
-            |> shellout.style(with: style, custom: lookups)
-          [tab, name, tab, item.1]
-          |> string.concat
-        })
-        |> list.sort(order_by)
-      ]
-      |> string.join(with: "\n")
-      |> Some
-    }
-    False -> None
-  }
-}
-
-/// Provides multitarget support for a given [`Task`](#Task).
-///
-/// If multiple targets are given with the `--target` flag, the [`Task`](#Task)
-/// will be run for each of them in succession.
-///
-/// This [`Task`](#Task) runs for all targets regardless of any failures;
-/// however, all runs must succeed for this [`Task`](#Task) to succeed.
-///
-pub fn multitarget(
-  task: fn(CommandInput) -> TaskResult,
-  input: CommandInput,
-) -> TaskResult {
-  assert Ok(flag.LS(targets)) =
-    "target"
-    |> flag.get_value(from: input.flags)
-
-  let #(oks, errors) =
-    targets
-    |> list.unique
-    |> list.index_map(with: fn(index, target) {
-      case index {
-        0 -> Nil
-        _else -> io.println("")
-      }
-      [
-        "  Targeting"
-        |> shellout.style(with: shellout.color(["magenta"]), custom: lookups),
-        " ",
-        target,
-        "...",
-      ]
-      |> string.concat
-      |> io.println
-      // Run the given task
-      assert Ok(flags) =
-        ["--target=", target]
-        |> string.concat
-        |> flag.update_flags(in: input.flags)
-      input.args
-      |> CommandInput(flags: flags)
-      |> task
-      |> function.tap(fn(result) {
-        case result {
-          Ok(_output) -> Nil
-          Error(snag) ->
-            snag
-            |> snag.pretty_print
-            |> string.trim
-            |> io.println
-        }
-      })
-    })
-    |> list.partition(with: result.is_ok)
-
-  // Format output
-  case errors {
-    [] ->
-      oks
-      |> result.values
-      |> string.join(with: "\n")
-      |> Ok
-    _else -> {
-      io.println("")
-      let errors = list.length(of: errors)
-      let results =
-        [errors, list.length(of: oks)]
-        |> int.sum
-        |> int.to_string
-      let failure = case results {
-        "1" -> "target"
-        _else -> "targets"
-      }
-      [
-        errors
-        |> int.to_string,
-        " of ",
-        results,
-        " ",
-        failure,
-        " failed",
-      ]
-      |> string.concat
-      |> snag.new
-      |> Error
-    }
-  }
-  |> result.map(with: string.trim)
-}
-
-/// TODO
-///
-pub fn name(input: CommandInput) -> TaskResult {
-  case input.args {
-    [] -> {
-      try toml =
-        "gleam.toml"
-        |> toml.parse_file
-      ["name"]
+  |> list.map(with: fn(toml) {
+    try task =
+      []
+      |> toml.decode(from: toml, expect: requirements)
+    task
+    |> shortdoc(
+      ["shortdoc"]
       |> toml.decode(from: toml, expect: dynamic.string)
-    }
-    _else -> util.dependency(input.args)
-  }
-  |> result.map(with: shellout.style(
-    _,
-    with: util.style_flags(input.flags),
-    custom: lookups,
-  ))
-}
-
-/// TODO
-///
-pub fn origin(_input: CommandInput) -> TaskResult {
-  shellout.command(
-    run: "git",
-    with: ["remote", "get-url", "origin"],
-    in: ".",
-    opt: [],
-  )
-  |> result.replace_error(snag.new("git remote `origin` not found"))
-}
-
-/// TODO
-///
-pub fn root(input: CommandInput) -> TaskResult {
-  assert Ok(flag.B(ver)) =
-    "version"
-    |> flag.get_value(from: input.flags)
-  case ver {
-    True -> {
-      let flags =
-        [#("bare", flag.Contents(value: flag.B(False), description: ""))]
-        |> flag.build_map
-      let version = fn(args) {
-        args
-        |> CommandInput(flags: flags)
-        |> version
-      }
-      ["rad"]
-      |> version
-      |> result.lazy_or(fn() { version([]) })
-    }
-    False ->
-      tasks()
-      |> help([], input)
-  }
-}
-
-/// TODO
-///
-pub fn shell(input: CommandInput) -> TaskResult {
-  do_shell(input)
-}
-
-if erlang {
-  fn do_shell(_input: CommandInput) -> TaskResult {
-    util.refuse_erlang()
-  }
-}
-
-if javascript {
-  fn do_shell(input: CommandInput) -> TaskResult {
-    let options = [LetBeStderr, LetBeStdout]
-    let runtime = case input.args {
-      [runtime, ..] -> runtime
-      _else -> "erlang"
-    }
-    case runtime {
-      "elixir" | "iex" -> {
-        try toml =
-          "gleam.toml"
-          |> toml.parse_file
-        try name =
-          ["name"]
-          |> toml.decode(from: toml, expect: dynamic.string)
-        try ebins =
-          util.ebin_paths()
-          |> result.replace_error(snag.new("failed to find `ebin` paths"))
-        [
-          ["--app", name],
-          [
-            "--erl",
-            ["-pa", ..ebins]
-            |> string.join(with: " "),
-          ],
-        ]
-        |> list.flatten
-        |> shellout.command(run: "iex", in: ".", opt: options)
-        |> result.replace_error(snag.new("failed to run `iex` shell"))
-      }
-
-      "nodejs" | "node" -> {
-        let script =
-          [
-            ["import('"],
-            [rad_path, "/dist/rad_ffi.mjs"],
-            ["')"],
-            [".then(module => module.load_modules())"],
-          ]
-          |> list.flatten
-          |> string.concat
-        ["--interactive", "--eval", script]
-        |> util.javascript_run(opt: options)
-      }
-
-      "erlang" | "erl" ->
-        []
-        |> util.erlang_run(opt: options)
-
-      _else ->
-        ["unsupported runtime `", runtime, "`"]
-        |> string.concat
-        |> snag.new
-        |> Error
-    }
-  }
-}
-
-/// TODO
-///
-pub fn tree(_input: CommandInput) -> TaskResult {
-  assert Ok(working_directory) = util.working_directory()
-  let result =
-    [
-      "--all",
-      "--color=always",
-      "--git-ignore",
-      ["--ignore-glob=", ignore_glob]
-      |> string.concat,
-      "--long",
-      "--git",
-      "--no-filesize",
-      "--no-permissions",
-      "--no-user",
-      "--no-time",
-      "--tree",
-      working_directory,
-    ]
-    |> shellout.command(run: "exa", in: ".", opt: [])
-    |> result.replace_error(snag.new("command `exa` not found"))
-  case result {
-    Ok(_output) -> result
-    Error(error) ->
-      [
-        ["-a"],
-        ["-C"],
-        ["-I", ignore_glob],
-        ["--matchdirs"],
-        ["--noreport"],
-        [working_directory],
-      ]
-      |> list.flatten
-      |> shellout.command(run: "tree", in: ".", opt: [])
-      |> result.replace_error(snag.layer(error, "command `tree` not found"))
-  }
-  |> result.map_error(with: function.compose(
-    snag.layer(_, "failed to find a known tree command"),
-    snag.layer(_, "failed to run task"),
-  ))
-}
-
-/// TODO
-///
-pub fn user(command: List(String), input: CommandInput) -> TaskResult {
-  let [command, ..args] = command
-  [args, util.relay_flags(input.flags), input.args]
-  |> list.flatten
-  |> shellout.command(run: command, in: ".", opt: [LetBeStderr, LetBeStdout])
-  |> result.replace_error(snag.new("task failed"))
-}
-
-/// TODO
-///
-pub fn version(input: CommandInput) -> TaskResult {
-  assert Ok(flag.B(bare)) =
-    "bare"
-    |> flag.get_value(from: input.flags)
-
-  try toml =
-    "gleam.toml"
-    |> toml.parse_file
-
-  try name = case bare {
-    True -> Ok(None)
-    False ->
-      case input.args {
-        [] ->
-          ["name"]
-          |> toml.decode(from: toml, expect: dynamic.string)
-        _else -> util.dependency(input.args)
-      }
-      |> result.map(with: Some)
-  }
-  let name =
-    name
-    |> option.map(with: shellout.style(
-      _,
-      with: util.style_flags(input.flags),
-      custom: lookups,
-    ))
-
-  try version = case input.args {
-    [] ->
-      ["version"]
-      |> toml.decode(from: toml, expect: dynamic.string)
-    _else -> util.packages(input.args)
-  }
-  let version =
-    case bare {
-      True -> version
-      False ->
-        ["v", version]
-        |> string.concat
-    }
-    |> Some
-
-  [name, version]
-  |> option.values
-  |> string.join(with: " ")
-  |> Ok
-}
-
-/// TODO
-///
-pub fn watch(input: CommandInput) -> TaskResult {
-  do_watch(input)
-}
-
-if erlang {
-  fn do_watch(_input: CommandInput) -> TaskResult {
-    util.refuse_erlang()
-  }
-}
-
-if javascript {
-  fn do_watch(input: CommandInput) -> TaskResult {
-    let options = [LetBeStderr, LetBeStdout]
-    let rad = util.which_rad()
-    let flags = util.relay_flags(input.flags)
-    [
-      " Watching"
-      |> shellout.style(with: shellout.color(["magenta"]), custom: lookups),
-      " … "
-      |> shellout.style(with: shellout.color(["cyan"]), custom: lookups),
-      "(Ctrl+C to quit)",
-    ]
-    |> string.concat
-    |> io.println
-
-    let result =
-      [
-        ignore_glob
-        |> string.split(on: "|")
-        |> list.map(with: fn(directory) {
-          ["--ignore=**/", directory, "/**"]
-          |> string.concat
-        }),
-        ["--postpone"],
-        ["--watch-when-idle"],
-        ["--", rad, "watch", "do", ..flags],
-      ]
-      |> list.flatten
-      |> shellout.command(run: "watchexec", in: ".", opt: options)
-      |> result.replace_error(snag.new("command `watchexec` not found"))
-    case result {
-      Ok(_output) -> result
-      Error(error) ->
-        watch_loop(
-          on: fn() {
-            [
-              ["--event", "create"],
-              ["--event", "delete"],
-              ["--event", "modify"],
-              ["--event", "move"],
-              [
-                "--exclude",
-                ["^[./\\\\]*(", ignore_glob, ")([/\\\\].*)*$"]
-                |> string.concat,
-              ],
-              ["-qq"],
-              ["--recursive"],
-              ["."],
-            ]
-            |> list.flatten
-            |> shellout.command(run: "inotifywait", in: ".", opt: options)
-          },
-          do: fn() {
-            ["watch", "do", ..flags]
-            |> shellout.command(run: rad, in: ".", opt: options)
-          },
-        )
-        |> result.replace_error(snag.layer(
-          error,
-          "command `inotifywait` not found",
-        ))
-    }
-    |> result.map_error(with: function.compose(
-      snag.layer(_, "failed to find a known watcher command"),
-      snag.layer(_, "failed to run task"),
-    ))
-  }
-
-  external fn watch_loop(
-    on: fn() -> Result(String, #(Int, String)),
-    do: fn() -> Result(String, #(Int, String)),
-  ) -> Result(String, Nil) =
-    "../rad_ffi.mjs" "watch_loop"
-}
-
-/// TODO
-///
-pub fn watch_do(input: CommandInput) -> TaskResult {
-  assert Ok(flag.B(no_docs)) =
-    "no-docs"
-    |> flag.get_value(from: input.flags)
-  assert Ok(flag.I(port)) =
-    "port"
-    |> flag.get_value(from: input.flags)
-  assert Ok(target_flag) =
-    "target"
-    |> map.get(input.flags, _)
-
-  io.println("")
-
-  case no_docs {
-    True -> Nil
-    False -> {
-      [
-        " Generating"
-        |> shellout.style(with: shellout.color(["magenta"]), custom: lookups),
-        "documentation",
-      ]
-      |> string.join(with: " ")
-      |> io.println
-      let _result =
-        ["docs", "build"]
-        |> shellout.command(run: "gleam", in: ".", opt: [])
-      // Live reload docs
-      ["http://localhost:", int.to_string(port), "/wonton-update"]
-      |> string.concat
-      |> util.ping
-      Nil
-    }
-  }
-
-  let gleam_test = gleam(["test"], _)
-  [#("target", target_flag)]
-  |> map.from_list
-  |> CommandInput(args: input.args)
-  |> multitarget(gleam_test, _)
+      |> result.unwrap(or: ""),
+    )
+    |> Ok
+  })
 }
