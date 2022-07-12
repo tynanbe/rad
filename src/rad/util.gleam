@@ -6,15 +6,17 @@ import gleam/float
 import gleam/function
 import gleam/http.{Header}
 import gleam/int
+import gleam/io
 import gleam/list
 import gleam/map
 import gleam/option.{Some}
 import gleam/result
 import gleam/string
 import gleam/uri.{Uri}
+import glint.{CommandInput}
 import glint/flag
 import rad/toml
-import shellout.{CommandOpt, Lookups}
+import shellout.{CommandOpt, LetBeStderr, LetBeStdout, Lookups}
 import snag.{Snag}
 
 if erlang {
@@ -246,6 +248,7 @@ pub fn refuse_erlang() -> Result(String, Snag) {
 ///
 pub fn relay_flags(flags: flag.Map) -> List(String) {
   flags
+  |> map.delete(delete: test_flag)
   |> map.to_list
   |> list.filter_map(with: fn(flag) {
     let #(key, flag.Contents(value: value, ..)) = flag
@@ -394,4 +397,47 @@ if erlang {
 if javascript {
   external fn do_working_directory() -> Result(String, Nil) =
     "../rad_ffi.mjs" "working_directory"
+}
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+// Test Support Functions                 //
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+
+const test_flag = "rad-test"
+
+/// TODO
+///
+pub fn delete_test_flag(input: CommandInput) -> CommandInput {
+  let flags =
+    test_flag
+    |> map.delete(from: input.flags)
+  CommandInput(..input, flags: flags)
+}
+
+/// TODO
+///
+pub fn quiet_or_println(input: CommandInput) -> fn(String) -> Nil {
+  case is_test(input) {
+    True -> function.constant(Nil)
+    False -> io.println
+  }
+}
+
+/// TODO
+///
+pub fn quiet_or_spawn(input: CommandInput) -> List(CommandOpt) {
+  case is_test(input) {
+    True -> []
+    False -> [LetBeStderr, LetBeStdout]
+  }
+}
+
+fn is_test(input: CommandInput) -> Bool {
+  let result =
+    test_flag
+    |> flag.get_value(from: input.flags)
+  case result {
+    Ok(flag.B(test)) -> test
+    _else -> False
+  }
 }

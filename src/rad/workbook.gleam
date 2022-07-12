@@ -1,3 +1,4 @@
+//// TODO: --with for all help
 //// TODO: Theme record
 //// TODO
 ////
@@ -118,7 +119,9 @@ pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
         let #(compare_path, subpath) =
           task.path
           |> list.split(at: list.length(path))
-        case path == compare_path && list.length(subpath) == 1 && task.shortdoc != "" {
+        case
+          path == compare_path && list.length(subpath) == 1 && task.shortdoc != ""
+        {
           True ->
             Task(..task, path: subpath)
             |> Ok

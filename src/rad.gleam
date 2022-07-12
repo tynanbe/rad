@@ -55,7 +55,7 @@ pub fn main() -> Nil {
       described: "",
       used: "",
     )
-    |> glint.execute(arguments(True))
+    |> glint.execute(arguments(Global))
 
   // Try to run any task `with` a given runtime
   rad_run(
@@ -104,7 +104,7 @@ pub fn do_main(workbook: Workbook) -> Nil {
       )
     },
   )
-  |> glint.execute(arguments(False))
+  |> glint.execute(arguments(Normal))
   |> result.map(with: fn(output) {
     case output {
       Out(result) -> result
@@ -115,12 +115,17 @@ pub fn do_main(workbook: Workbook) -> Nil {
   |> end_task
 }
 
-fn arguments(init: Bool) -> List(String) {
+type Scope {
+  Global
+  Normal
+}
+
+fn arguments(scope: Scope) -> List(String) {
   let filter = string.starts_with(_, "--with=")
   shellout.arguments()
-  |> list.filter(for: case init {
-    True -> filter
-    False ->
+  |> list.filter(for: case scope {
+    Global -> filter
+    Normal ->
       filter
       |> function.compose(bool.negate)
   })

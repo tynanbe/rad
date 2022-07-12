@@ -9,7 +9,6 @@
 import gleam
 import gleam/dynamic
 import gleam/int
-import gleam/io
 import gleam/list
 import gleam/result
 import gleam/string
@@ -17,7 +16,7 @@ import glint.{CommandInput}
 import glint/flag.{Flag}
 import rad/toml.{Toml}
 import rad/util
-import shellout.{LetBeStderr, LetBeStdout}
+import shellout
 import snag.{Snag}
 
 /// The basic configuration unit for the `rad` command line interface.
@@ -266,13 +265,14 @@ pub fn targets() -> Iterable(a) {
   }
 
   let mapper = fn(input: CommandInput, _task, index, target) {
+    let io_println = util.quiet_or_println(input)
     let target = case target {
       [target] -> target
       _else -> ""
     }
     case index {
       0 -> Nil
-      _else -> io.println("")
+      _else -> io_println("")
     }
     let _heading =
       [
@@ -283,7 +283,7 @@ pub fn targets() -> Iterable(a) {
         "...",
       ]
       |> string.concat
-      |> io.println
+      |> io_println
     assert Ok(flags) =
       ["--target=", target]
       |> string.concat
@@ -308,7 +308,7 @@ pub fn basic(command: List(String)) -> Runner(Result) {
     let [command, ..args] = command
     [args, util.relay_flags(input.flags), input.args]
     |> list.flatten
-    |> shellout.command(run: command, in: ".", opt: [LetBeStderr, LetBeStdout])
+    |> shellout.command(run: command, in: ".", opt: util.quiet_or_spawn(input))
     |> result.replace_error(snag.new("task failed"))
   }
 }
@@ -323,7 +323,7 @@ pub fn gleam(arguments: List(String)) -> Runner(Result) {
   fn(input: CommandInput, _task) {
     [arguments, util.relay_flags(input.flags), input.args]
     |> list.flatten
-    |> shellout.command(run: "gleam", in: ".", opt: [LetBeStderr, LetBeStdout])
+    |> shellout.command(run: "gleam", in: ".", opt: util.quiet_or_spawn(input))
     |> result.replace("")
     |> result.replace_error(snag.new("task failed"))
   }
@@ -341,6 +341,7 @@ pub fn gleam(arguments: List(String)) -> Runner(Result) {
 ///
 pub fn trainer(runner: Runner(Result)) -> Runner(Result) {
   fn(input, task: Task(Result)) {
+    let io_println = util.quiet_or_println(input)
     let config = case task.config {
       Config ->
         "gleam.toml"
@@ -381,7 +382,7 @@ pub fn trainer(runner: Runner(Result)) -> Runner(Result) {
                 let _print =
                   output
                   |> string.trim
-                  |> io.println
+                  |> io_println
                 Ok("")
               }
               True, Error(snag) -> {
@@ -389,7 +390,7 @@ pub fn trainer(runner: Runner(Result)) -> Runner(Result) {
                   snag
                   |> snag.pretty_print
                   |> string.trim
-                  |> io.println
+                  |> io_println
                 result
               }
               _else, _any -> result
@@ -407,7 +408,7 @@ pub fn trainer(runner: Runner(Result)) -> Runner(Result) {
         |> string.join(with: "\n")
         |> Ok
       _else, _any -> {
-        io.println("")
+        io_println("")
         let errors = list.length(of: errors)
         let results =
           [errors, list.length(of: oks)]
