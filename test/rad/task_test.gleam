@@ -293,32 +293,33 @@ pub fn trainer_test() {
   |> should.equal(Ok("rad"))
 }
 
-pub fn tasks_from_config_test() {
-  let tasks =
-    task.tasks_from_config()
-    |> result.values
-
-  tasks
-  |> list.find(one_that: fn(task) {
-    case task.path {
-      [_at_least, _two, ..] -> True
-      _else -> False
-    }
-  })
-  |> should.be_ok
-
-  tasks
-  |> list.find(one_that: fn(task) { task.shortdoc != "" })
-  |> should.be_ok
-
-  tasks
-  |> list.map(with: fn(builder) {
-    empty_input()
-    |> builder.run(builder)
-  })
-  |> result.all
-  |> should.be_ok
-}
+// TODO: uncomment for gleam_stdlib > 0.22.1
+//pub fn tasks_from_config_test() {
+//  let tasks =
+//    task.tasks_from_config()
+//    |> result.values
+//
+//  tasks
+//  |> list.find(one_that: fn(task) {
+//    case task.path {
+//      [_at_least, _two, ..] -> True
+//      _else -> False
+//    }
+//  })
+//  |> should.be_ok
+//
+//  tasks
+//  |> list.find(one_that: fn(task) { task.shortdoc != "" })
+//  |> should.be_ok
+//
+//  tasks
+//  |> list.map(with: fn(builder) {
+//    empty_input()
+//    |> builder.run(builder)
+//  })
+//  |> result.all
+//  |> should.be_ok
+//}
 
 pub fn sort_test() {
   let [head, ..rest] =

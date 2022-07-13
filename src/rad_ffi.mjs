@@ -138,11 +138,7 @@ export function rename(source, dest) {
 export function toml_decode_every(toml, key_path, decoder) {
   let result = toml_get(toml, key_path);
   if (!result.isOk()) {
-    let decode_error = new DecodeError(
-      "Toml",
-      classify_dynamic(data),
-      toList(key_path),
-    );
+    let decode_error = new DecodeError("field", "nothing", key_path);
     return new Error(toList([decode_error]));
   }
   toml = result[0];

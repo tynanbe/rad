@@ -12,7 +12,7 @@ if erlang {
   import gleam/map
 }
 
-/// TODO
+/// A TOML [table](https://toml.io/en/v1.0.0#table) of dynamic data.
 ///
 pub external type Toml
 
