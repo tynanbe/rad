@@ -5,6 +5,7 @@
 import gleam
 import gleam/dynamic
 import gleam/function
+import gleam/http.{Header}
 import gleam/int
 import gleam/io
 import gleam/list
@@ -13,6 +14,7 @@ import gleam/option.{None, Some}
 import gleam/pair
 import gleam/result
 import gleam/string
+import gleam/uri.{Uri}
 import glint.{CommandInput}
 import glint/flag
 import rad
@@ -25,6 +27,15 @@ import rad/util
 import rad/workbook.{Workbook, help, task}
 import shellout.{LetBeStderr, LetBeStdout, StyleFlags}
 import snag.{Snag}
+
+if erlang {
+  import gleam/http/request
+  import gleam/httpc
+}
+
+if javascript {
+  import gleam/json
+}
 
 /// TODO
 ///
@@ -242,8 +253,8 @@ pub fn workbook() -> Workbook {
     |> shortdoc("Print a package name")
     |> flags(style_flags)
     |> parameter(
-      with: "[package]",
-      of: "Package name (default: current project)",
+      with: "..[packages]",
+      of: "Package name(s) (default: current project)",
     )
     |> with_config,
   )
@@ -251,6 +262,13 @@ pub fn workbook() -> Workbook {
     add: ["origin"]
     |> new(run: origin)
     |> shortdoc("Print the repository URL"),
+  )
+  |> task(
+    add: ["ping"]
+    |> new(run: ping)
+    |> for(each: arguments)
+    |> shortdoc("Fetch HTTP status codes")
+    |> parameter(with: "..<uris>", of: "Request location(s)"),
   )
   |> task(
     add: ["shell"]
@@ -281,14 +299,14 @@ pub fn workbook() -> Workbook {
     |> shortdoc("Print a package version")
     |> flag(
       called: "bare",
-      explained: "Omit the package name",
+      explained: "Omit the package name(s)",
       expect: flag.bool,
       default: False,
     )
     |> flags(style_flags)
     |> parameter(
-      with: "[package]",
-      of: "Package name (default: current project)",
+      with: "..[packages]",
+      of: "Package name(s) (default: current project)",
     )
     |> with_config,
   )
@@ -337,7 +355,7 @@ pub fn config(input: CommandInput, task: Task(Result)) -> Result {
   assert Parsed(toml) = task.config
   input.args
   |> toml.decode(from: toml, expect: dynamic.dynamic)
-  |> result.map(with: toml.encode_json)
+  |> result.map(with: util.encode_json)
 }
 
 /// TODO: split out `all`, `do_docs_build`
@@ -619,6 +637,87 @@ pub fn origin(_input: CommandInput, _task: Task(Result)) -> Result {
 
 /// TODO
 ///
+pub fn ping(input: CommandInput, _task: Task(Result)) -> Result {
+  let [uri_string, ..] = input.args
+  assert Ok(uri) = uri.parse(uri_string)
+  case uri.host {
+    Some("localhost") -> Uri(..uri, host: Some("127.0.0.1"))
+    _else -> uri
+  }
+  |> uri.to_string
+  |> do_ping([#("cache-control", "no-cache, no-store")])
+  |> result.map(with: int.to_string)
+  |> result.map_error(
+    with: int.to_string
+    |> function.compose(snag.new),
+  )
+}
+
+if erlang {
+  fn do_ping(
+    uri_string: String,
+    headers: List(Header),
+  ) -> gleam.Result(Int, Int) {
+    try uri =
+      uri_string
+      |> uri.parse
+      |> result.replace_error(400)
+
+    try request =
+      uri
+      |> request.from_uri
+      |> result.replace_error(400)
+
+    headers
+    |> list.fold(
+      from: request,
+      with: fn(acc, header) { request.prepend_header(acc, header.0, header.1) },
+    )
+    |> httpc.send
+    |> result.map(with: fn(response) { response.status })
+    |> result.replace_error(503)
+  }
+}
+
+if javascript {
+  fn do_ping(
+    uri_string: String,
+    headers: List(Header),
+  ) -> gleam.Result(Int, Int) {
+    let headers =
+      headers
+      |> list.map(with: fn(header) { #(header.0, json.string(header.1)) })
+      |> json.object
+      |> json.to_string
+
+    let script =
+      [
+        ["fetch('", uri_string, "', ", headers, ")"],
+        [".then((response) => response.status)"],
+        [".catch(() => 503)"],
+        [".then(console.log)"],
+        [".then(() => process.exit(0))"],
+      ]
+      |> list.flatten
+      |> string.concat
+    try status =
+      ["--eval", script]
+      |> util.javascript_run(opt: [])
+      |> result.replace_error(503)
+
+    assert Ok(status) =
+      status
+      |> string.trim
+      |> int.parse
+    case status < 400 {
+      True -> Ok(status)
+      False -> Error(status)
+    }
+  }
+}
+
+/// TODO
+///
 pub fn shell(input: CommandInput, task: Task(Result)) -> Result {
   do_shell(input, task)
 }
@@ -890,9 +989,13 @@ pub fn watch_do(input: CommandInput, _task: Task(Result)) -> Result {
         ["docs", "build"]
         |> shellout.command(run: "gleam", in: ".", opt: [])
       // Live reload docs
-      ["http://localhost:", int.to_string(port), "/wonton-update"]
-      |> string.concat
-      |> util.ping
+      let uri_string =
+        ["http://localhost:", int.to_string(port), "/wonton-update"]
+        |> string.concat
+      let _result =
+        [uri_string]
+        |> CommandInput(flags: map.new())
+        |> ping(task.new(at: [], run: fn(_input, _task) { Ok("") }))
       Nil
     }
   }

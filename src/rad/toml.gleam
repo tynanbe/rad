@@ -116,22 +116,6 @@ if javascript {
 
 /// TODO
 ///
-pub fn encode_json(data: a) -> String {
-  do_encode_json(data)
-}
-
-if erlang {
-  external fn do_encode_json(a) -> String =
-    "thoas" "encode"
-}
-
-if javascript {
-  external fn do_encode_json(a) -> String =
-    "" "globalThis.JSON.stringify"
-}
-
-/// TODO
-///
 pub fn from_dynamic(data: Dynamic) -> Result(Toml, DecodeErrors) {
   decode_object(data)
 }

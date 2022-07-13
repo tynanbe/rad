@@ -10,6 +10,7 @@ import glint.{CommandInput}
 import glint/flag
 import rad/task.{Config, Each, NoConfig, Once, Parsed, Result, Task}
 import rad/toml
+import rad/util
 import rad/workbook
 import rad/workbook/standard
 import snag
@@ -166,7 +167,7 @@ pub fn config_test() {
       Parsed(toml) ->
         []
         |> toml.decode(from: toml, expect: dynamic.dynamic)
-        |> result.map(with: toml.encode_json)
+        |> result.map(with: util.encode_json)
       _else -> Error(snag.new(""))
     }
   }
