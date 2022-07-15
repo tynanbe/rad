@@ -5,20 +5,22 @@ import * as TOML from "../priv/node_modules/@ltd/j-toml/index.mjs";
 import * as fs from "fs";
 import * as path from "path";
 
-const prefix = "./build/dev/javascript";
-const ok_signals = [...Array(3)].map((_, i) => i + 385);
 const Nil = undefined;
 
-export function decode_object(data) {
-  if (typeof data === "object" && !Array.isArray(data) && null !== data) {
-    return new Ok(data);
-  }
-  let decode_error = new DecodeError(
-    "Object",
-    classify_dynamic(data),
-    toList([]),
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+// Runtime Functions                      //
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+
+const prefix = "./build/dev/javascript";
+
+export function gleam_run(module) {
+  let module_re = new RegExp("(^([.]*/)+|(/[.]*)+$|(/[.]+/)+)", "g");
+  module = module.replace(module_re, "");
+  let dir = module.replace(new RegExp("/.*$"), "");
+  import(path.join("../..", dir, "dist", `${module}.mjs`)).then(
+    (module) => module.main(),
   );
-  return new Error(toList([decode_error]));
+  return Nil;
 }
 
 export function ebin_paths() {
@@ -37,30 +39,26 @@ export function ebin_paths() {
   }
 }
 
-export function gleam_run(module) {
-  let module_re = new RegExp("(^([.]*/)+|(/[.]*)+$|(/[.]+/)+)", "g");
-  module = module.replace(module_re, "");
-  let dir = module.replace(new RegExp("/.*$"), "");
-  import(path.join("../..", dir, "dist", `${module}.mjs`)).then(
-    (module) => module.main(),
-  );
+export function load_modules() {
+  let re_prefix = prefix.replace(".", "[.]");
+  mjs_paths()[0]
+    .toArray()
+    .map((item) => {
+      let name = item.replace(
+        new RegExp(`^${re_prefix}/[^/]+/dist/(.*)[.]mjs$`),
+        "$$$1",
+      ).replaceAll("/", "$");
+      item = item.replace(new RegExp(`^${re_prefix}`), "../..");
+      return [name, item];
+    })
+    .forEach(
+      (item) =>
+        import(item[1]).then(
+          (module) => globalThis[item[0]] = module,
+          (_error) => Nil,
+        ),
+    );
   return Nil;
-}
-
-export function is_directory(pathname) {
-  try {
-    return fs.statSync(pathname).isDirectory();
-  } catch {
-    return false;
-  }
-}
-
-export function is_file(pathname) {
-  try {
-    return fs.statSync(pathname).isFile();
-  } catch {
-    return false;
-  }
 }
 
 export function mjs_paths() {
@@ -95,44 +93,37 @@ function do_mjs_paths(prefix) {
   );
 }
 
-export function load_modules() {
-  let re_prefix = prefix.replace(".", "[.]");
-  mjs_paths()[0]
-    .toArray()
-    .map((item) => {
-      let name = item.replace(
-        new RegExp(`^${re_prefix}/[^/]+/dist/(.*)[.]mjs$`),
-        "$$$1",
-      ).replaceAll("/", "$");
-      item = item.replace(new RegExp(`^${re_prefix}`), "../..");
-      return [name, item];
-    })
-    .forEach(
-      (item) =>
-        import(item[1]).then(
-          (module) => globalThis[item[0]] = module,
-          (_error) => Nil,
-        ),
-    );
-  return Nil;
+const ok_signals = [...Array(3)].map((_, i) => i + 385);
+
+export function watch_loop(watch_fun, do_fun) {
+  while (true) {
+    let result = watch_fun();
+    if (result.isOk()) {
+      do_fun();
+    } else if (ok_signals.includes(result[0][0])) {
+      // Exit successfully on some signals.
+      break;
+    } else {
+      return result;
+    }
+  }
+  return new Ok("\n");
 }
 
-export function recursive_delete(pathname) {
-  try {
-    fs.rmSync(pathname, { force: true, recursive: true });
-    return new Ok(Nil);
-  } catch (err) {
-    return new Error(err.code);
-  }
-}
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+// TOML Functions                         //
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
-export function rename(source, dest) {
-  try {
-    fs.renameSync(source, dest);
-    return new Ok(Nil);
-  } catch (err) {
-    return new Error(err.code);
+export function decode_object(data) {
+  if (typeof data === "object" && !Array.isArray(data) && null !== data) {
+    return new Ok(data);
   }
+  let decode_error = new DecodeError(
+    "Object",
+    classify_dynamic(data),
+    toList([]),
+  );
+  return new Error(toList([decode_error]));
 }
 
 export function toml_decode_every(toml, key_path, decoder) {
@@ -173,19 +164,43 @@ export function toml_read_file(pathname) {
   }
 }
 
-export function watch_loop(watch_fun, do_fun) {
-  while (true) {
-    let result = watch_fun();
-    if (result.isOk()) {
-      do_fun();
-    } else if (ok_signals.includes(result[0][0])) {
-      // Exit successfully on some signals.
-      break;
-    } else {
-      return result;
-    }
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+// File System Functions                  //
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+
+export function file_write(contents, pathname) {
+  try {
+    fs.writeFileSync(pathname, contents);
+    return new Ok(Nil);
+  } catch (err) {
+    return new Error(err);
   }
-  return new Ok("\n");
+}
+
+export function is_directory(pathname) {
+  try {
+    return fs.statSync(pathname).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+export function recursive_delete(pathname) {
+  try {
+    fs.rmSync(pathname, { force: true, recursive: true });
+    return new Ok(Nil);
+  } catch (err) {
+    return new Error(err.code);
+  }
+}
+
+export function rename(source, dest) {
+  try {
+    fs.renameSync(source, dest);
+    return new Ok(Nil);
+  } catch (err) {
+    return new Error(err.code);
+  }
 }
 
 export function working_directory() {

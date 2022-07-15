@@ -388,7 +388,7 @@ pub fn docs_build(input: CommandInput, task: Task(Result)) -> Result {
         // Gleam packages only
         ["./build/packages/", name, "/gleam.toml"]
         |> string.concat
-        |> util.is_file
+        |> util.file_exists
       })
       |> function.tap(fn(dependencies) {
         case dependencies {

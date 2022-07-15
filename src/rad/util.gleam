@@ -1,7 +1,7 @@
 //// A motley assortment of utility functions.
 ////
 
-import gleam/dynamic
+import gleam/dynamic.{Dynamic}
 import gleam/float
 import gleam/function
 import gleam/int
@@ -19,9 +19,6 @@ import snag.{Snag}
 if erlang {
   import gleam/erlang/atom
   import gleam/erlang/file
-
-  type Dynamic =
-    dynamic.Dynamic
 }
 
 /// TODO
@@ -148,18 +145,16 @@ pub fn relay_flags(flags: flag.Map) -> List(String) {
 ///
 pub fn which_rad() -> String {
   let or_try = fn(first, executable) {
-    result.lazy_or(
-      first,
-      fn() {
-        let rad =
-          [rad_path, "/priv/", executable]
-          |> string.concat
-        ["--version"]
-        |> shellout.command(run: rad, in: ".", opt: [])
-        |> result.replace(rad)
-        |> result.nil_error
-      },
-    )
+    first
+    |> result.lazy_or(fn() {
+      let rad =
+        [rad_path, "/priv/", executable]
+        |> string.concat
+      ["--version"]
+      |> shellout.command(run: rad, in: ".", opt: [])
+      |> result.replace(rad)
+      |> result.nil_error
+    })
   }
 
   assert Ok(path) =
@@ -224,6 +219,51 @@ pub fn packages(path: List(String)) -> Result(String, Snag) {
 
 /// TODO
 ///
+pub fn file_exists(path: String) -> Bool {
+  do_file_exists(path)
+}
+
+if erlang {
+  fn do_file_exists(path: String) -> Bool {
+    // TODO when gleam_erlang changes: file.exists(path)
+    file.is_file(path)
+  }
+}
+
+if javascript {
+  external fn do_file_exists(String) -> Bool =
+    "" "globalThis.fs.existsSync"
+}
+
+/// TODO
+///
+pub fn file_write(
+  contents contents: String,
+  to path: String,
+) -> Result(String, Snag) {
+  contents
+  |> do_file_write(path)
+  |> result.replace("")
+  |> result.map_error(with: fn(_reason) {
+    ["failed to write to `", path, "`"]
+    |> string.concat
+    |> snag.new
+  })
+}
+
+if erlang {
+  fn do_file_write(contents: String, path: String) -> Result(Nil, file.Reason) {
+    file.write(contents: contents, to: path)
+  }
+}
+
+if javascript {
+  external fn do_file_write(String, String) -> Result(Nil, Dynamic) =
+    "../rad_ffi.mjs" "file_write"
+}
+
+/// TODO
+///
 pub fn is_directory(path: String) -> Bool {
   do_is_directory(path)
 }
@@ -237,23 +277,6 @@ if erlang {
 if javascript {
   external fn do_is_directory(String) -> Bool =
     "../rad_ffi.mjs" "is_directory"
-}
-
-/// TODO
-///
-pub fn is_file(path: String) -> Bool {
-  do_is_file(path)
-}
-
-if erlang {
-  fn do_is_file(path: String) -> Bool {
-    file.is_file(path)
-  }
-}
-
-if javascript {
-  external fn do_is_file(String) -> Bool =
-    "../rad_ffi.mjs" "is_file"
 }
 
 /// TODO

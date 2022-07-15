@@ -205,7 +205,9 @@ fn rad_run(with: String, fun: fn() -> Nil) -> Nil {
     _else_if, "erlang" ->
       {
         let options = [LetBeStderr, LetBeStdout]
-        try _output = case util.is_file("./build/dev/erlang/rad/ebin/rad.app") {
+        try _output = case
+          util.file_exists("./build/dev/erlang/rad/ebin/rad.app")
+        {
           True -> Ok("")
           False ->
             // Build `rad` for Erlang

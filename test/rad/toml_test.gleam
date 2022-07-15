@@ -24,7 +24,7 @@ pub fn parse_file_test() {
   let file = "src/rad/toml.gleam"
 
   file
-  |> util.is_file
+  |> util.file_exists
   |> should.be_true
 
   file
@@ -34,7 +34,7 @@ pub fn parse_file_test() {
   let file = "gloom.toml"
 
   file
-  |> util.is_file
+  |> util.file_exists
   |> should.be_false
 
   file

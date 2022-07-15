@@ -45,6 +45,8 @@ jobs:
           key: ${{ runner.os }}-gleam-${{ hashFiles('**/manifest.toml') }}
           restore-keys: ${{ runner.os }}-gleam-
 
+      - run: gleam build --target=javascript
+
       - run: gleam test --target=erlang
 
       - run: gleam test --target=javascript
