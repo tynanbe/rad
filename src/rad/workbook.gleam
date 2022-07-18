@@ -70,7 +70,7 @@ pub fn tasks(into workbook: Workbook, add tasks: Tasks) -> Workbook {
 
 /// TODO
 ///
-pub fn delete(from workbook: Workbook, path: List(String)) -> Workbook {
+pub fn delete(from workbook: Workbook, delete path: List(String)) -> Workbook {
   workbook
   |> map.delete(delete: path)
 }

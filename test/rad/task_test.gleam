@@ -15,6 +15,10 @@ import rad/workbook
 import rad/workbook/standard
 import snag
 
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+// Task Builder Functions                 //
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+
 pub fn builder_test() {
   let path = ["d", "e", "f"]
 
@@ -107,6 +111,10 @@ pub fn builder_test() {
   |> should.equal(Config)
 }
 
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+// Iterable Functions                     //
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+
 pub fn iterable_test() {
   let flags = [
     "target"
@@ -160,6 +168,10 @@ pub fn iterable_test() {
   target
   |> should.equal(["erlang"])
 }
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+// Task Runner Functions                  //
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
 pub fn config_test() {
   let runner = fn(_input, task: Task(Result)) {
@@ -293,6 +305,10 @@ pub fn trainer_test() {
   |> should.equal(Ok("rad"))
 }
 
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+// Miscellaneous Functions                //
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+
 // TODO: uncomment for gleam_stdlib > 0.22.1
 //pub fn tasks_from_config_test() {
 //  let tasks =
@@ -339,6 +355,10 @@ pub fn sort_test() {
   watch_do.path
   |> should.equal(["watch", "do"])
 }
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+// Private Helper Functions               //
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
 fn empty_input() -> CommandInput {
   input_args([])
