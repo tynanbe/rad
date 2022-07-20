@@ -3,9 +3,9 @@ import gleam/map
 import gleam/option
 import gleam/string
 import gleeunit/should
-import glint.{CommandInput}
 import rad/task
 import rad/workbook.{Workbook}
+import rad_test.{input, run, task}
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 // Workbook Builder Functions             //
@@ -101,56 +101,56 @@ fn workbook() -> Workbook {
 }
 
 pub fn help_test() {
-  assert Ok(help) =
-    workbook()
-    |> map.get(["help"])
+  let help =
+    ["help"]
+    |> task(from: workbook())
 
   ["help"]
-  |> CommandInput(flags: map.new())
-  |> help.run(help)
+  |> input(flags: [])
+  |> run(help)
   |> should.be_ok
 
   ["chansey"]
-  |> CommandInput(flags: map.new())
-  |> help.run(help)
+  |> input(flags: [])
+  |> run(help)
   |> should.be_ok
 
   let help_blissey =
     ["blissey"]
-    |> CommandInput(flags: map.new())
-    |> help.run(help)
+    |> input(flags: [])
+    |> run(help)
 
   help_blissey
   |> should.be_ok
 
-  assert Ok(blissey) =
-    workbook()
-    |> map.get(["blissey"])
+  let blissey =
+    ["blissey"]
+    |> task(from: workbook())
 
   ["blissey"]
-  |> CommandInput(flags: map.new())
-  |> blissey.run(blissey)
+  |> input(flags: [])
+  |> run(blissey)
   |> should.equal(help_blissey)
 
   []
-  |> CommandInput(flags: map.new())
-  |> help.run(help)
+  |> input(flags: [])
+  |> run(help)
   |> should.be_error
 
   ["snorlax"]
-  |> CommandInput(flags: map.new())
-  |> help.run(help)
+  |> input(flags: [])
+  |> run(help)
   |> should.be_error
 }
 
 pub fn info_test() {
-  assert Ok(chansey) =
-    workbook()
-    |> map.get(["chansey"])
+  let chansey =
+    ["chansey"]
+    |> task(from: workbook())
 
   []
-  |> CommandInput(flags: map.new())
-  |> chansey.run(chansey)
+  |> input(flags: [])
+  |> run(chansey)
   |> should.be_ok
 }
 

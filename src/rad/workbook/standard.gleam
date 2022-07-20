@@ -492,6 +492,7 @@ pub type Formatter {
   Formatter(name: String, check: List(String), run: List(String))
 }
 
+/// TODO: refactor with Iterable?
 /// TODO
 ///
 pub fn format(input: CommandInput, task: Task(Result)) -> Result {
@@ -638,8 +639,23 @@ pub fn origin(_input: CommandInput, _task: Task(Result)) -> Result {
 /// TODO
 ///
 pub fn ping(input: CommandInput, _task: Task(Result)) -> Result {
-  let [uri_string, ..] = input.args
-  assert Ok(uri) = uri.parse(uri_string)
+  try uri_string = case input.args {
+    [uri_string, ..] ->
+      uri_string
+      |> Ok
+    _else ->
+      "URI not provided"
+      |> snag.new
+      |> Error
+  }
+  try uri =
+    uri_string
+    |> uri.parse
+    |> result.map_error(with: fn(_nil) {
+      ["invalid URI `", uri_string, "`"]
+      |> string.concat
+      |> snag.new
+    })
   case uri.host {
     Some("localhost") -> Uri(..uri, host: Some("127.0.0.1"))
     _else -> uri
@@ -795,11 +811,11 @@ pub fn tree(_input: CommandInput, _task: Task(Result)) -> Result {
     [
       "--all",
       "--color=always",
+      "--git",
       "--git-ignore",
       ["--ignore-glob=", ignore_glob]
       |> string.concat,
       "--long",
-      "--git",
       "--no-filesize",
       "--no-permissions",
       "--no-user",

@@ -13,6 +13,7 @@ import rad/toml
 import rad/util
 import rad/workbook
 import rad/workbook/standard
+import rad_test.{empty_input, input, run, task}
 import snag
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
@@ -30,8 +31,9 @@ pub fn builder_test() {
   builder.path
   |> should.equal(path)
 
-  input_args(["a", "b", "c"])
-  |> builder.run(builder)
+  ["a", "b", "c"]
+  |> input(flags: [])
+  |> run(builder)
   |> should.be_ok
 
   builder.for
@@ -89,8 +91,9 @@ pub fn builder_test() {
   builder.path
   |> should.equal(path)
 
-  input_args(["a", "b", "c"])
-  |> builder.run(builder)
+  ["a", "b", "c"]
+  |> input(flags: [])
+  |> run(builder)
   |> should.be_ok
 
   builder.for
@@ -189,14 +192,14 @@ pub fn config_test() {
     |> task.new(run: runner)
     |> task.with_config
   empty_input()
-  |> builder.run(builder)
+  |> run(builder)
   |> should.be_ok
 
   let builder =
     []
     |> task.new(run: runner)
   empty_input()
-  |> builder.run(builder)
+  |> run(builder)
   |> should.be_error
 }
 
@@ -205,14 +208,14 @@ pub fn basic_test() {
     []
     |> task.new(run: task.basic(["echo"]))
   empty_input()
-  |> builder.run(builder)
+  |> run(builder)
   |> should.be_ok
 
   let builder =
     []
     |> task.new(run: task.basic([""]))
   empty_input()
-  |> builder.run(builder)
+  |> run(builder)
   |> should.be_error
 }
 
@@ -221,12 +224,14 @@ pub fn gleam_test() {
     []
     |> task.new(run: task.gleam([]))
 
-  input_args(["--version"])
-  |> builder.run(builder)
+  ["--", "--version"]
+  |> input(flags: [])
+  |> run(builder)
   |> should.be_ok
 
-  input_args(["help", "haaalp"])
-  |> builder.run(builder)
+  ["help", "haaalp"]
+  |> input(flags: [])
+  |> run(builder)
   |> should.be_error
 }
 
@@ -260,18 +265,21 @@ pub fn trainer_test() {
       |> result.map(with: string.join(_, with: ", "))
     })
 
-  input_args(["1"])
-  |> builder.run(builder)
+  ["1"]
+  |> input(flags: [])
+  |> run(builder)
   |> should.equal(Ok("oddish 1"))
 
-  input_args(["1", "2"])
-  |> builder.run(builder)
+  ["1", "2"]
+  |> input(flags: [])
+  |> run(builder)
   |> should.be_error
 
   let args = ["1", "3", "5"]
 
-  input_args(args)
-  |> builder.run(builder)
+  args
+  |> input(flags: [])
+  |> run(builder)
   |> should.equal(
     args
     |> list.map(with: string.append(to: "oddish ", suffix: _))
@@ -283,12 +291,14 @@ pub fn trainer_test() {
     builder
     |> task.for(each: task.arguments)
 
-  input_args(args)
-  |> builder.run(builder)
+  args
+  |> input(flags: [])
+  |> run(builder)
   |> should.equal(Ok(""))
 
-  input_args(["1", "2", "3"])
-  |> builder.run(builder)
+  ["1", "2", "3"]
+  |> input(flags: [])
+  |> run(builder)
   |> should.be_error
 
   let builder =
@@ -300,8 +310,9 @@ pub fn trainer_test() {
     })
     |> task.with_config
 
-  input_args(["name"])
-  |> builder.run(builder)
+  ["name"]
+  |> input(flags: [])
+  |> run(builder)
   |> should.equal(Ok("rad"))
 }
 
@@ -331,7 +342,7 @@ pub fn trainer_test() {
 //  tasks
 //  |> list.map(with: fn(builder) {
 //    empty_input()
-//    |> builder.run(builder)
+//    |> run(builder)
 //  })
 //  |> result.all
 //  |> should.be_ok
@@ -354,18 +365,4 @@ pub fn sort_test() {
     |> list.split_while(satisfying: fn(task) { task.path != ["watch"] })
   watch_do.path
   |> should.equal(["watch", "do"])
-}
-
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
-// Private Helper Functions               //
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
-
-fn empty_input() -> CommandInput {
-  input_args([])
-}
-
-fn input_args(args: List(String)) -> CommandInput {
-  [flag.bool(called: "rad-test", default: True, explained: "")]
-  |> flag.build_map
-  |> CommandInput(args: args)
 }
