@@ -39,6 +39,9 @@ pub fn builder_test() {
   builder.for
   |> should.equal(Once)
 
+  builder.delimiter
+  |> should.equal("\n")
+
   builder.shortdoc
   |> should.equal("")
 
@@ -52,6 +55,7 @@ pub fn builder_test() {
   |> should.equal(NoConfig)
 
   // Update
+  let delimiter = ","
   let shortdoc = "Lucy, I'm home!"
   let #(_name, flag1_contents) as flag1 =
     "all"
@@ -69,6 +73,7 @@ pub fn builder_test() {
   let builder =
     builder
     |> task.for(each: task.arguments)
+    |> task.delimit(with: delimiter)
     |> task.shortdoc(insert: shortdoc)
     |> task.flag(
       called: flag1.0,
@@ -99,6 +104,9 @@ pub fn builder_test() {
   builder.for
   |> should.not_equal(Once)
 
+  builder.delimiter
+  |> should.equal(delimiter)
+
   builder.shortdoc
   |> should.equal(shortdoc)
 
@@ -118,58 +126,162 @@ pub fn builder_test() {
 // Iterable Functions                     //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
-pub fn iterable_test() {
-  let flags = [
-    "target"
-    |> flag.strings(default: ["erlang"], explained: "Nock on, Hood"),
-    "rad-test"
-    |> flag.bool(default: True, explained: ""),
-  ]
-  assert Ok(input_flags) =
-    flags
-    |> map.from_list
-    |> flag.update_flags(with: "--target=erlang,javascript")
-  let input =
-    ["a", "b", "c"]
-    |> CommandInput(flags: input_flags)
-
-  // task.arguments
+pub fn arguments_test() {
+  let input = iterable_input()
   let builder =
-    []
-    |> task.new(run: task.basic(["echo"]))
+    iterable_builder()
     |> task.for(each: task.arguments)
-    |> task.flags(add: flags)
+
   assert Each(get: items_fun, map: mapper) = builder.for
-  let _items =
-    input
-    |> items_fun(builder)
-    |> should.equal(input.args)
-  let item =
-    input
-    |> mapper(builder, 0, ["a"])
+
+  input
+  |> items_fun(builder)
+  |> should.equal(input.args)
+
+  let item = mapper(input, builder, 0, ["a"])
+
   item.args
   |> should.equal(["a"])
+}
 
-  // task.targets
+pub fn formatters_test() {
+  let input = iterable_input()
   let builder =
-    builder
+    iterable_builder()
+    |> task.for(each: task.formatters)
+
+  assert Each(get: _items_fun, map: mapper) = builder.for
+  // TODO: uncomment for gleam_stdlib > 0.22.1
+  //assert Each(get: items_fun, map: mapper) = builder.for
+  //
+  //case items_fun(input, builder) {
+  //  [_gleam, _javascript, ..] -> True
+  //  _else -> False
+  //}
+  //|> should.be_true
+  //
+  let item = mapper(input, builder, 0, ["0"])
+
+  case item.args {
+    ["gleam", ..] -> True
+    _else -> False
+  }
+  |> should.be_true
+}
+
+pub fn packages_test() {
+  let input = iterable_input()
+  let builder =
+    iterable_builder()
+    |> task.for(each: task.packages)
+
+  assert Each(get: items_fun, map: mapper) = builder.for
+
+  let items = items_fun(input, builder)
+
+  items
+  |> list.contains("rad")
+  |> should.be_true
+
+  items
+  |> list.contains("gleam_stdlib")
+  |> should.be_true
+
+  let item = mapper(input, builder, 0, ["a"])
+
+  item.args
+  |> should.equal(["a"])
+}
+
+pub fn targets_test() {
+  let input = iterable_input()
+  let builder =
+    iterable_builder()
     |> task.for(each: task.targets)
+
   assert Ok(flag.LS(targets)) =
     "target"
     |> flag.get_value(from: input.flags)
+
   assert Each(get: items_fun, map: mapper) = builder.for
-  let _items =
-    input
-    |> items_fun(builder)
-    |> should.equal(targets)
-  let item =
-    input
-    |> mapper(builder, 0, ["erlang"])
+
+  input
+  |> items_fun(builder)
+  |> should.equal(targets)
+
+  let item = mapper(input, builder, 0, ["erlang"])
+
   assert Ok(flag.LS(target)) =
     "target"
     |> flag.get_value(from: item.flags)
+
   target
   |> should.equal(["erlang"])
+}
+
+pub fn or_test() {
+  let input = iterable_input()
+  let builder =
+    iterable_builder()
+    |> task.for(
+      each: task.packages
+      |> task.or(cond: "all", else: task.arguments),
+    )
+
+  assert Each(get: items_fun, ..) = builder.for
+
+  let items = items_fun(input, builder)
+
+  items
+  |> should.equal(input.args)
+
+  let [first, ..] =
+    CommandInput(
+      ..input,
+      flags: "--all"
+      |> flag.update_flags(in: input.flags)
+      |> result.unwrap(or: input.flags),
+    )
+    |> items_fun(builder)
+
+  first
+  |> should.equal("rad")
+}
+
+fn iterable_builder() {
+  let builder =
+    []
+    |> task.new(run: task.basic(["echo"]))
+    |> task.flags(add: iterable_flags())
+  Task(
+    ..builder,
+    config: "gleam.toml"
+    |> toml.parse_file
+    |> result.lazy_unwrap(or: toml.new)
+    |> Parsed,
+  )
+}
+
+fn iterable_input() {
+  assert Ok(flags) =
+    iterable_flags()
+    |> map.from_list
+    |> flag.update_flags(with: "--target=erlang,javascript")
+  ["a", "b", "c"]
+  |> CommandInput(flags: flags)
+}
+
+fn iterable_flags() {
+  [
+    "rad-test"
+    |> flag.bool(default: True, explained: ""),
+    "all"
+    |> flag.bool(default: False, explained: ""),
+    "check"
+    |> flag.bool(default: False, explained: ""),
+    "target"
+    |> flag.strings(default: ["erlang"], explained: ""),
+  ]
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//

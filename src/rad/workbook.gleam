@@ -1,4 +1,3 @@
-//// TODO: --with for all help
 //// TODO: Theme record
 //// TODO
 ////
@@ -129,7 +128,20 @@ pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
         }
       })
 
-    let has_flags = task.flags != []
+    // Get flags
+    let task_flags = [
+      "help"
+      |> flag.bool(default: False, explained: "Print help information"),
+      "with"
+      |> flag.string(default: "", explained: "Specify a rad runtime"),
+      ..task.flags
+      |> list.filter(for: fn(flag) {
+        let #(_name, contents) = flag
+        contents.description != ""
+      })
+    ]
+
+    let has_flags = task_flags != []
     let has_parameters = task.parameters != []
     let has_tasks = tasks != []
 
@@ -228,7 +240,7 @@ pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
       "Flags"
       |> section(
         when: has_flags,
-        enum: task.flags,
+        enum: task_flags,
         with: fn(flag) {
           let #(name, contents) = flag
           let name =
@@ -287,11 +299,14 @@ pub fn info(task: Task(Result)) -> Result {
   let version =
     ["version"]
     |> toml.decode(from: toml, expect: dynamic.string)
-    |> result.map(with: shellout.style(
-      _,
-      with: shellout.display(["italic"]),
-      custom: util.lookups,
-    ))
+    |> result.map(
+      with: string.append(to: "v", suffix: _)
+      |> function.compose(shellout.style(
+        _,
+        with: shellout.display(["italic"]),
+        custom: util.lookups,
+      )),
+    )
     |> option.from_result
 
   let description =

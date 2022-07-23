@@ -9,7 +9,9 @@
 import gleam
 import gleam/dynamic
 import gleam/int
+import gleam/json
 import gleam/list
+import gleam/pair
 import gleam/result
 import gleam/string
 import glint.{CommandInput}
@@ -40,6 +42,7 @@ pub type Task(a) {
     path: List(String),
     run: Runner(a),
     for: Iterable(a),
+    delimiter: String,
     shortdoc: String,
     flags: List(Flag),
     parameters: List(#(String, String)),
@@ -128,11 +131,21 @@ pub fn new(at path: List(String), run runner: Runner(Result)) -> Task(Result) {
     path: path,
     run: trainer(runner),
     for: Once,
+    delimiter: "\n",
     shortdoc: "",
     flags: [],
     parameters: [],
     config: NoConfig,
   )
+}
+
+/// Returns a new [`Task`](#Task) with the given delimiter string.
+///
+/// This string is printed between items when a task runs [`for`](#for) multiple
+/// iterations.
+///
+pub fn delimit(iterable task: Task(a), with delimiter: String) -> Task(a) {
+  Task(..task, delimiter: delimiter)
 }
 
 /// Returns a new [`Task`](#Task) with the given input
@@ -233,6 +246,54 @@ pub fn with_config(task: Task(a)) -> Task(a) {
 // Iterable Functions                     //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
+/// Returns a function that generates a given [`Iterable`](#Iterable) when the
+/// [`Runner`](#Runner)'s
+/// [`CommandInput`](https://hexdocs.pm/glint/glint.html#CommandInput) contains
+/// a boolean input [`Flag`](https://hexdocs.pm/glint/glint/flag.html#Flag)
+/// called `flag_name` with a `True` value, or another [`Iterable`](#Iterable)
+/// otherwise.
+///
+/// An [`Iterable`](#Iterable) can be attached to a given [`Task`](#Task) using
+/// the [`for`](#for) builder function.
+///
+pub fn or(
+  true_fun: fn() -> Iterable(a),
+  cond flag_name: String,
+  else false_fun: fn() -> Iterable(a),
+) -> fn() -> Iterable(a) {
+  let cond = fn(input: CommandInput) {
+    assert Ok(flag.B(flag_value)) =
+      flag_name
+      |> flag.get_value(from: input.flags)
+    case flag_value {
+      True -> true_fun()
+      False -> false_fun()
+    }
+  }
+
+  let items_fun = fn(input: CommandInput, task) {
+    case cond(input) {
+      Each(get: items_fun, ..) -> items_fun(input, task)
+      _else -> [util.encode_json(input.args)]
+    }
+  }
+
+  let mapper = fn(input: CommandInput, task, index, item) {
+    case cond(input) {
+      Each(map: mapper, ..) -> mapper(input, task, index, item)
+      _else -> {
+        let [item] = item
+        item
+        |> json.decode(using: dynamic.list(of: dynamic.string))
+        |> result.unwrap(or: [])
+        |> CommandInput(flags: input.flags)
+      }
+    }
+  }
+
+  fn() { Each(get: items_fun, map: mapper) }
+}
+
 /// Returns an [`Iterable`](#Iterable) that tells a [`Runner`](#Runner) how to
 /// run for each of a list of input arguments.
 ///
@@ -249,8 +310,151 @@ pub fn arguments() -> Iterable(a) {
   Each(get: items_fun, map: mapper)
 }
 
+/// A type that describes an external source code formatter.
+///
+/// If a [`Task`](#Task) uses [`formatters`](#formatters) as its
+/// [`Iterable`](#Iterable), that task will run the `gleam` formatter along with
+/// any formatters defined in your `gleam.toml` config via the `rad.formatters`
+/// table array.
+///
+/// ## Examples
+///
+/// ```toml
+/// [[rad.formatters]]
+/// name = "javascript"
+/// check = ["rome", "ci", "--indent-style=space", "src", "test"]
+/// run = ["rome", "format", "--indent-style=space", "--write", "src", "test"]
+/// ```
+///
+pub type Formatter {
+  Formatter(name: String, check: List(String), run: List(String))
+}
+
 /// Returns an [`Iterable`](#Iterable) that tells a [`Runner`](#Runner) how to
-/// run for each of a list of targets.
+/// run for each project [`Formatter`](#Formatter). The Gleam
+/// [`Formatter`](#Formatter) is always included.
+///
+/// An [`Iterable`](#Iterable) can be attached to a given [`Task`](#Task) using
+/// the [`for`](#for) builder function.
+///
+pub fn formatters() -> Iterable(a) {
+  let formatters = [
+    "gleam"
+    |> Formatter(
+      check: ["gleam", "format", "--check"],
+      run: ["gleam", "format"],
+    )
+    |> Ok,
+    ..formatters_from_config()
+  ]
+
+  let items_fun = fn(_input, _task) {
+    formatters
+    |> list.map(with: fn(_result) { "" })
+  }
+
+  let mapper = fn(input: CommandInput, _task, index, _argument) {
+    let io_println = util.quiet_or_println(input)
+    assert Ok(flag.B(check)) =
+      "check"
+      |> flag.get_value(from: input.flags)
+    let result =
+      formatters
+      |> list.at(get: index)
+      |> result.unwrap(or: snag.error(""))
+
+    case result {
+      Ok(formatter) -> {
+        let #(action, extra, args) = case check {
+          True -> #("   Checking", " formatting", formatter.check)
+          False -> #(" Formatting", "", formatter.run)
+        }
+        let _print =
+          [
+            action
+            |> shellout.style(with: shellout.color(["magenta"]), custom: []),
+            " ",
+            formatter.name,
+            extra,
+            "...\n",
+          ]
+          |> string.concat
+          |> io_println
+        args
+        |> CommandInput(flags: input.flags)
+      }
+      _else ->
+        "--fail"
+        |> flag.update_flags(in: input.flags)
+        |> result.unwrap(or: input.flags)
+        |> CommandInput(args: [])
+    }
+  }
+
+  Each(get: items_fun, map: mapper)
+}
+
+fn formatters_from_config() -> List(gleam.Result(Formatter, Snag)) {
+  let dynamic_strings = fn(name) {
+    dynamic.field(named: name, of: dynamic.list(of: dynamic.string))
+  }
+  let requirements =
+    Formatter
+    |> dynamic.decode3(
+      dynamic.field(named: "name", of: dynamic.string),
+      dynamic_strings("check"),
+      dynamic_strings("run"),
+    )
+  let toml =
+    "gleam.toml"
+    |> toml.parse_file
+    |> result.lazy_unwrap(or: toml.new)
+
+  ["rad", "formatters"]
+  |> toml.decode(from: toml, expect: dynamic.list(of: toml.from_dynamic))
+  |> result.unwrap(or: [])
+  |> list.map(with: toml.decode(from: _, get: [], expect: requirements))
+}
+
+/// Returns an [`Iterable`](#Iterable) that tells a [`Runner`](#Runner) how to
+/// run for each project dependency and the project itself.
+///
+/// An [`Iterable`](#Iterable) can be attached to a given [`Task`](#Task) using
+/// the [`for`](#for) builder function.
+///
+pub fn packages() -> Iterable(a) {
+  let items_fun = fn(_input, task: Task(a)) {
+    assert Parsed(toml) = task.config
+    assert Ok(self) =
+      ["name"]
+      |> toml.decode(from: toml, expect: dynamic.string)
+    let dependencies =
+      ["dependencies"]
+      |> toml.decode_every(from: toml, expect: dynamic.string)
+      |> result.unwrap(or: [])
+    let dev_dependencies =
+      ["dev-dependencies"]
+      |> toml.decode_every(from: toml, expect: dynamic.string)
+      |> result.unwrap(or: [])
+    [
+      self,
+      ..[dependencies, dev_dependencies]
+      |> list.flatten
+      |> list.map(with: pair.first)
+      |> list.sort(by: string.compare)
+    ]
+    |> list.unique
+  }
+
+  let mapper = fn(input: CommandInput, _task, _index, argument) {
+    CommandInput(..input, args: argument)
+  }
+
+  Each(get: items_fun, map: mapper)
+}
+
+/// Returns an [`Iterable`](#Iterable) that tells a [`Runner`](#Runner) how to
+/// run for each compilation target.
 ///
 /// An [`Iterable`](#Iterable) can be attached to a given [`Task`](#Task) using
 /// the [`for`](#for) builder function.
@@ -264,15 +468,11 @@ pub fn targets() -> Iterable(a) {
     |> list.unique
   }
 
-  let mapper = fn(input: CommandInput, _task, index, target) {
+  let mapper = fn(input: CommandInput, _task, _index, target) {
     let io_println = util.quiet_or_println(input)
     let target = case target {
       [target] -> target
       _else -> ""
-    }
-    case index {
-      0 -> Nil
-      _else -> io_println("")
     }
     let _heading =
       [
@@ -309,7 +509,7 @@ pub fn basic(command: List(String)) -> Runner(Result) {
     [args, util.relay_flags(input.flags), input.args]
     |> list.flatten
     |> shellout.command(run: command, in: ".", opt: util.quiet_or_spawn(input))
-    |> result.replace_error(snag.new("task failed"))
+    |> result.replace_error(snag.new("failed running task"))
   }
 }
 
@@ -325,7 +525,7 @@ pub fn gleam(arguments: List(String)) -> Runner(Result) {
     |> list.flatten
     |> shellout.command(run: "gleam", in: ".", opt: util.quiet_or_spawn(input))
     |> result.replace("")
-    |> result.replace_error(snag.new("task failed"))
+    |> result.replace_error(snag.new("failed running task"))
   }
 }
 
@@ -341,7 +541,7 @@ pub fn gleam(arguments: List(String)) -> Runner(Result) {
 ///
 pub fn trainer(runner: Runner(Result)) -> Runner(Result) {
   fn(input, task: Task(Result)) {
-    let io_println = util.quiet_or_println(input)
+    let io_print = util.quiet_or_print(input)
     let config = case task.config {
       Config ->
         "gleam.toml"
@@ -356,10 +556,8 @@ pub fn trainer(runner: Runner(Result)) -> Runner(Result) {
       Each(get: items_fun, map: mapper) -> #(items_fun(input, task), mapper)
       Once -> #([], fn(input, _task, _index, _target) { input })
     }
-    let is_aggregate = case items {
-      [_at_least, _two, ..] -> True
-      _else -> False
-    }
+    let last_index = list.length(items) - 1
+    let is_aggregate = last_index > 0
 
     let #(oks, errors) =
       case items {
@@ -373,24 +571,38 @@ pub fn trainer(runner: Runner(Result)) -> Runner(Result) {
         _else ->
           items
           |> list.index_map(with: fn(index, item) {
+            let end_aggregate_run = fn(output) {
+              let output = case string.ends_with(output, "\n") {
+                True ->
+                  output
+                  |> string.drop_right(up_to: 1)
+                False -> output
+              }
+              let end = case index == last_index {
+                True if output == "" -> ""
+                True -> "\n"
+                False -> task.delimiter
+              }
+              [output, end]
+              |> string.concat
+              |> io_print
+            }
             let result =
               input
               |> mapper(task, index, [item])
               |> runner(task)
             case is_aggregate, result {
-              True, Ok(output) if output != "" -> {
+              True, Ok(output) -> {
                 let _print =
                   output
-                  |> string.trim
-                  |> io_println
+                  |> end_aggregate_run
                 Ok("")
               }
               True, Error(snag) -> {
                 let _print =
                   snag
-                  |> snag.pretty_print
-                  |> string.trim
-                  |> io_println
+                  |> util.snag_pretty_print
+                  |> end_aggregate_run
                 result
               }
               _else, _any -> result
@@ -405,10 +617,11 @@ pub fn trainer(runner: Runner(Result)) -> Runner(Result) {
       _any, [] ->
         oks
         |> result.values
-        |> string.join(with: "\n")
+        |> list.filter(for: fn(output) { output != "" })
+        |> string.join(with: task.delimiter)
         |> Ok
       _else, _any -> {
-        io_println("")
+        io_print("\n")
         let errors = list.length(of: errors)
         let results =
           [errors, list.length(of: oks)]
@@ -419,11 +632,10 @@ pub fn trainer(runner: Runner(Result)) -> Runner(Result) {
           |> int.to_string,
           "of",
           results,
-          "task items failed",
+          "task runs failed",
         ]
         |> string.join(with: " ")
-        |> snag.new
-        |> Error
+        |> snag.error
       }
     }
     |> result.map(with: string.trim)

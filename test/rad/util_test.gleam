@@ -60,45 +60,6 @@ pub fn refuse_erlang_test() {
   |> should.be_error
 }
 
-pub fn relay_flags_test() {
-  [
-    "rad-test"
-    |> flag.bool(default: True, explained: ""),
-    "eevee"
-    |> flag.bool(default: False, explained: ""),
-    "vaporeon"
-    |> flag.float(default: 1., explained: ""),
-    "jolteon"
-    |> flag.floats(default: [2., 0.2], explained: ""),
-    "flareon"
-    |> flag.int(default: 3, explained: ""),
-    "espeon"
-    |> flag.ints(default: [4, 0, 4], explained: ""),
-    "umbreon"
-    |> flag.string(default: "5", explained: ""),
-    "ditto"
-    |> flag.strings(default: ["eevee"], explained: ""),
-  ]
-  |> flag.build_map
-  |> util.relay_flags
-  |> list.sort(by: string.compare)
-  |> should.equal([
-    "--ditto=eevee", "--espeon=4,0,4", "--flareon=3", "--jolteon=2.0,0.2", "--umbreon=5",
-    "--vaporeon=1.0",
-  ])
-
-  []
-  |> flag.build_map
-  |> util.relay_flags
-  |> should.equal([])
-}
-
-pub fn which_rad_test() {
-  util.which_rad()
-  |> string.contains(contain: "/rad")
-  |> should.be_true
-}
-
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 // TOML Helper Functions                  //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
@@ -186,4 +147,47 @@ pub fn rename_test() {
   rhydon
   |> util.recursive_delete
   |> should.be_ok
+}
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+// Miscellaneous Functions                //
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+
+pub fn relay_flags_test() {
+  [
+    "rad-test"
+    |> flag.bool(default: True, explained: ""),
+    "eevee"
+    |> flag.bool(default: False, explained: ""),
+    "vaporeon"
+    |> flag.float(default: 1., explained: ""),
+    "jolteon"
+    |> flag.floats(default: [2., 0.2], explained: ""),
+    "flareon"
+    |> flag.int(default: 3, explained: ""),
+    "espeon"
+    |> flag.ints(default: [4, 0, 4], explained: ""),
+    "umbreon"
+    |> flag.string(default: "5", explained: ""),
+    "ditto"
+    |> flag.strings(default: ["eevee"], explained: ""),
+  ]
+  |> flag.build_map
+  |> util.relay_flags
+  |> list.sort(by: string.compare)
+  |> should.equal([
+    "--ditto=eevee", "--espeon=4,0,4", "--flareon=3", "--jolteon=2.0,0.2", "--umbreon=5",
+    "--vaporeon=1.0",
+  ])
+
+  []
+  |> flag.build_map
+  |> util.relay_flags
+  |> should.equal([])
+}
+
+pub fn which_rad_test() {
+  util.which_rad()
+  |> string.contains(contain: "/rad")
+  |> should.be_true
 }

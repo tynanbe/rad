@@ -82,7 +82,7 @@ pub fn do_main(workbook: Workbook) -> Nil {
   task.tasks_from_config()
   |> list.map(with: result.map_error(_, with: fn(snag) {
     Snag(..snag, issue: "invalid `[[rad.tasks]]` in `gleam.toml`")
-    |> snag.pretty_print
+    |> util.snag_pretty_print
     |> string.trim
     |> string.append(suffix: "\n")
     |> io.println
@@ -122,13 +122,40 @@ type Scope {
 
 fn arguments(scope: Scope) -> List(String) {
   let filter = string.starts_with(_, "--with=")
-  shellout.arguments()
-  |> list.filter(for: case scope {
-    Global -> filter
-    Normal ->
-      filter
-      |> function.compose(bool.negate)
-  })
+  let arguments =
+    shellout.arguments()
+    |> list.filter(for: case scope {
+      Global -> filter
+      Normal ->
+        filter
+        |> function.compose(bool.negate)
+    })
+  case scope {
+    Global -> arguments
+    Normal -> {
+      // Help flag uses rad's workbook.help
+      let #(arguments, is_help) =
+        arguments
+        |> list.fold(
+          from: #([], False),
+          with: fn(acc, argument) {
+            let #(arguments, is_help) = acc
+            case argument {
+              "--help" | "--help=true" -> #(arguments, True)
+              "--help=false" -> #(arguments, False)
+              _else -> #([argument, ..arguments], is_help)
+            }
+          },
+        )
+      let arguments =
+        arguments
+        |> list.reverse
+      case is_help {
+        True -> ["help", ..arguments]
+        False -> arguments
+      }
+    }
+  }
 }
 
 fn end_task(result: Result(String, Snag)) -> Nil {
@@ -145,7 +172,7 @@ fn end_task(result: Result(String, Snag)) -> Nil {
     }
     Error(error) -> {
       error
-      |> snag.pretty_print
+      |> util.snag_pretty_print
       |> io.print
       shellout.exit(1)
     }

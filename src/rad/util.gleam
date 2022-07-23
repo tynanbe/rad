@@ -10,6 +10,7 @@ import gleam/list
 import gleam/map
 import gleam/result
 import gleam/string
+import gleam/string_builder
 import glint.{CommandInput}
 import glint/flag
 import rad/toml
@@ -104,66 +105,6 @@ pub fn refuse_erlang() -> Result(String, Snag) {
   "task cannot be run with erlang"
   |> snag.error
   |> snag.context("failed to run task")
-}
-
-/// TODO
-///
-pub fn relay_flags(flags: flag.Map) -> List(String) {
-  flags
-  |> map.delete(delete: test_flag)
-  |> map.to_list
-  |> list.filter_map(with: fn(flag) {
-    let #(key, flag.Contents(value: value, ..)) = flag
-    let relay_flag = fn(value: a, fun) {
-      ["--", key, "=", fun(value)]
-      |> string.concat
-      |> Ok
-    }
-    let relay_multiflag = fn(value: List(a), fun) {
-      list.map(_, with: fun)
-      |> function.compose(string.join(_, with: ","))
-      |> relay_flag(value, _)
-    }
-
-    case value {
-      flag.B(value) if value ->
-        ["--", key]
-        |> string.concat
-        |> Ok
-      flag.F(value) -> relay_flag(value, float.to_string)
-      flag.I(value) -> relay_flag(value, int.to_string)
-      flag.LF(value) -> relay_multiflag(value, float.to_string)
-      flag.LI(value) -> relay_multiflag(value, int.to_string)
-      flag.LS(value) -> relay_multiflag(value, function.identity)
-      flag.S(value) -> relay_flag(value, function.identity)
-      _else -> Error(Nil)
-    }
-  })
-}
-
-/// TODO
-///
-pub fn which_rad() -> String {
-  let or_try = fn(first, executable) {
-    first
-    |> result.lazy_or(fn() {
-      let rad =
-        [rad_path, "/priv/", executable]
-        |> string.concat
-      ["--version"]
-      |> shellout.command(run: rad, in: ".", opt: [])
-      |> result.replace(rad)
-      |> result.nil_error
-    })
-  }
-
-  assert Ok(path) =
-    "rad"
-    |> shellout.which
-    |> result.nil_error
-    |> or_try("rad")
-    |> or_try("rad.ps1")
-  path
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
@@ -281,6 +222,30 @@ if javascript {
 
 /// TODO
 ///
+pub fn make_directory(path: String) -> Result(String, Snag) {
+  path
+  |> do_make_directory
+  |> result.replace("")
+  |> result.map_error(with: fn(_reason) {
+    ["failed to make directory `", path, "`"]
+    |> string.concat
+    |> snag.new
+  })
+}
+
+if erlang {
+  fn do_make_directory(path: String) -> Result(Nil, file.Reason) {
+    file.make_directory(path)
+  }
+}
+
+if javascript {
+  external fn do_make_directory(String) -> Result(Nil, String) =
+    "../rad_ffi.mjs" "make_directory"
+}
+
+/// TODO
+///
 pub fn recursive_delete(path: String) -> Result(String, Snag) {
   path
   |> do_recursive_delete
@@ -373,6 +338,130 @@ if javascript {
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+// Miscellaneous Functions                //
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+
+/// Turn a snag into a multi-line string, optimised for readability.
+///
+pub fn snag_pretty_print(snag: Snag) -> String {
+  let builder =
+    [
+      "error"
+      |> bold(and: ["red"]),
+      ": "
+      |> bold([]),
+      snag.issue
+      |> bold([]),
+      "\n",
+    ]
+    |> string_builder.from_strings
+
+  case snag.cause {
+    [] -> builder
+    cause ->
+      [
+        "\n",
+        "cause"
+        |> bold(and: ["red"]),
+        ":\n"
+        |> bold([]),
+      ]
+      |> string_builder.from_strings
+      |> string_builder.append_builder(to: builder)
+      |> string_builder.append_builder(suffix: pretty_print_cause(cause))
+  }
+  |> string_builder.to_string
+}
+
+fn pretty_print_cause(cause) {
+  cause
+  |> list.index_map(with: fn(index, line) {
+    [
+      "  ",
+      index
+      |> int.to_string
+      |> bold(and: ["red"]),
+      ": "
+      |> bold([]),
+      line
+      |> bold([]),
+      "\n",
+    ]
+    |> string.concat
+  })
+  |> string_builder.from_strings
+}
+
+fn bold(string, and colors: List(String)) -> String {
+  string
+  |> shellout.style(
+    with: shellout.display(["bold"])
+    |> map.merge(from: shellout.color(colors)),
+    custom: lookups,
+  )
+}
+
+/// TODO
+///
+pub fn relay_flags(flags: flag.Map) -> List(String) {
+  flags
+  |> map.delete(delete: test_flag)
+  |> map.to_list
+  |> list.filter_map(with: fn(flag) {
+    let #(key, flag.Contents(value: value, ..)) = flag
+    let relay_flag = fn(value: a, fun) {
+      ["--", key, "=", fun(value)]
+      |> string.concat
+      |> Ok
+    }
+    let relay_multiflag = fn(value: List(a), fun) {
+      list.map(_, with: fun)
+      |> function.compose(string.join(_, with: ","))
+      |> relay_flag(value, _)
+    }
+
+    case value {
+      flag.B(value) if value ->
+        ["--", key]
+        |> string.concat
+        |> Ok
+      flag.F(value) -> relay_flag(value, float.to_string)
+      flag.I(value) -> relay_flag(value, int.to_string)
+      flag.LF(value) -> relay_multiflag(value, float.to_string)
+      flag.LI(value) -> relay_multiflag(value, int.to_string)
+      flag.LS(value) -> relay_multiflag(value, function.identity)
+      flag.S(value) -> relay_flag(value, function.identity)
+      _else -> Error(Nil)
+    }
+  })
+}
+
+/// TODO
+///
+pub fn which_rad() -> String {
+  let or_try = fn(first, executable) {
+    first
+    |> result.lazy_or(fn() {
+      let rad =
+        [rad_path, "/priv/", executable]
+        |> string.concat
+      ["--version"]
+      |> shellout.command(run: rad, in: ".", opt: [])
+      |> result.replace(rad)
+      |> result.nil_error
+    })
+  }
+
+  assert Ok(path) =
+    "rad"
+    |> shellout.which
+    |> result.nil_error
+    |> or_try("rad")
+    |> or_try("rad.ps1")
+  path
+}
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 // Test Support Functions                 //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
@@ -385,6 +474,15 @@ pub fn delete_test_flag(input: CommandInput) -> CommandInput {
     test_flag
     |> map.delete(from: input.flags)
   CommandInput(..input, flags: flags)
+}
+
+/// TODO
+///
+pub fn quiet_or_print(input: CommandInput) -> fn(String) -> Nil {
+  case is_test(input) {
+    True -> function.constant(Nil)
+    False -> io.print
+  }
 }
 
 /// TODO

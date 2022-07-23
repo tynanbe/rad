@@ -11,7 +11,6 @@ import gleam/io
 import gleam/list
 import gleam/map
 import gleam/option.{None, Some}
-import gleam/pair
 import gleam/result
 import gleam/string
 import gleam/uri.{Uri}
@@ -19,14 +18,14 @@ import glint.{CommandInput}
 import glint/flag
 import rad
 import rad/task.{
-  Parsed, Result, Task, arguments, flag, flags, for, gleam, new, parameter, shortdoc,
-  targets, with_config,
+  Parsed, Result, Task, arguments, delimit, flag, flags, for, formatters, gleam,
+  new, or, packages, parameter, shortdoc, targets, with_config,
 }
 import rad/toml
 import rad/util
 import rad/workbook.{Workbook, help, task}
 import shellout.{LetBeStderr, LetBeStdout, StyleFlags}
-import snag.{Snag}
+import snag
 
 if erlang {
   import gleam/http/request
@@ -86,11 +85,11 @@ pub fn workbook() -> Workbook {
     |> flag.strings(called: "target", explained: "The platform(s) to target"),
   ]
 
-  let docs_flags = [
+  let package_flags = [
     flag.bool(
       called: "all",
       default: False,
-      explained: "Build docs for all packages",
+      explained: "Run the task for all packages",
     ),
   ]
 
@@ -143,7 +142,7 @@ pub fn workbook() -> Workbook {
       expect: flag.bool,
       default: False,
     )
-    |> flags(target_flags),
+    |> flags(add: target_flags),
   )
   |> task(
     add: ["check"]
@@ -174,6 +173,11 @@ pub fn workbook() -> Workbook {
     |> shortdoc("List dependency packages"),
   )
   |> task(
+    add: ["deps", "update"]
+    |> new(run: gleam(["deps", "update"]))
+    |> shortdoc("Update dependency packages to their latest versions"),
+  )
+  |> task(
     add: ["docs"]
     |> new(run: help(from: workbook))
     |> shortdoc("Work with HTML documentation")
@@ -182,8 +186,12 @@ pub fn workbook() -> Workbook {
   |> task(
     add: ["docs", "build"]
     |> new(run: docs_build)
+    |> for(
+      each: packages
+      |> or(cond: "all", else: arguments),
+    )
     |> shortdoc("Render HTML documentation")
-    |> flags(docs_flags)
+    |> flags(add: package_flags)
     |> parameter(
       with: "..[packages]",
       of: "Package name(s) (default: current project)",
@@ -212,15 +220,18 @@ pub fn workbook() -> Workbook {
       expect: flag.int,
       default: 7000,
     )
-    |> flags(docs_flags)
+    |> flags(add: package_flags)
     |> parameter(
       with: "..[packages]",
       of: "Package name(s) to build docs for (default: current project)",
-    ),
+    )
+    |> with_config,
   )
   |> task(
     add: ["format"]
     |> new(run: format)
+    |> for(each: formatters)
+    |> delimit(with: "\n\n")
     |> shortdoc("Format source code")
     |> flag(
       called: "check",
@@ -228,12 +239,13 @@ pub fn workbook() -> Workbook {
       expect: flag.bool,
       default: False,
     )
-    |> parameter(with: "..[files]", of: "Files to format (default: .)"),
+    |> flag(called: "fail", explained: "", expect: flag.bool, default: False),
   )
+  //|> parameter(with: "..[files]", of: "Files to format (default: .)"),
   |> task(
     add: ["Hello,", "Lucy!"]
     |> new(run: hello_lucy)
-    |> flags(list.drop(from: style_flags, up_to: 1))
+    |> flags(add: list.drop(from: style_flags, up_to: 1))
     |> shortdoc("Greet Gleam's mascot ✨"),
   )
   |> task(
@@ -249,9 +261,13 @@ pub fn workbook() -> Workbook {
   |> task(
     add: ["name"]
     |> new(run: name)
-    |> for(each: arguments)
+    |> for(
+      each: packages
+      |> or(cond: "all", else: arguments),
+    )
     |> shortdoc("Print a package name")
-    |> flags(style_flags)
+    |> flags(add: package_flags)
+    |> flags(add: style_flags)
     |> parameter(
       with: "..[packages]",
       of: "Package name(s) (default: current project)",
@@ -285,7 +301,7 @@ pub fn workbook() -> Workbook {
     |> new(run: gleam(["test"]))
     |> for(each: targets)
     |> shortdoc("Run the project tests")
-    |> flags(target_flags),
+    |> flags(add: target_flags),
   )
   |> task(
     add: ["tree"]
@@ -295,15 +311,19 @@ pub fn workbook() -> Workbook {
   |> task(
     add: ["version"]
     |> new(run: version)
-    |> for(each: arguments)
+    |> for(
+      each: packages
+      |> or(cond: "all", else: arguments),
+    )
     |> shortdoc("Print a package version")
+    |> flags(add: package_flags)
     |> flag(
       called: "bare",
       explained: "Omit the package name(s)",
       expect: flag.bool,
       default: False,
     )
-    |> flags(style_flags)
+    |> flags(add: style_flags)
     |> parameter(
       with: "..[packages]",
       of: "Package name(s) (default: current project)",
@@ -314,12 +334,12 @@ pub fn workbook() -> Workbook {
     add: ["watch"]
     |> new(run: watch)
     |> shortdoc("Automate some project tasks")
-    |> flags(watch_flags),
+    |> flags(add: watch_flags),
   )
   |> task(
     add: ["watch", "do"]
     |> new(run: watch_do)
-    |> flags(watch_flags),
+    |> flags(add: watch_flags),
   )
 }
 
@@ -358,101 +378,94 @@ pub fn config(input: CommandInput, task: Task(Result)) -> Result {
   |> result.map(with: util.encode_json)
 }
 
-/// TODO: split out `all`, `do_docs_build`
 /// TODO
 ///
 pub fn docs_build(input: CommandInput, task: Task(Result)) -> Result {
   assert Ok(flag.B(all)) =
     "all"
     |> flag.get_value(from: input.flags)
-  let input = case all {
-    True -> {
-      // Prepare to build documentation for all Gleam dependencies
-      assert Ok(flags) =
-        "--all=false"
-        |> flag.update_flags(in: input.flags)
-      assert Parsed(toml) = task.config
-      let dependencies =
-        ["dependencies"]
-        |> toml.decode_every(from: toml, expect: dynamic.string)
-        |> result.unwrap(or: [])
-      let dev_dependencies =
-        ["dev-dependencies"]
-        |> toml.decode_every(from: toml, expect: dynamic.string)
-        |> result.unwrap(or: [])
-      [dependencies, dev_dependencies]
-      |> list.flatten
-      |> list.map(with: pair.first)
-      |> list.unique
-      |> list.filter(for: fn(name) {
-        // Gleam packages only
-        ["./build/packages/", name, "/gleam.toml"]
-        |> string.concat
-        |> util.file_exists
-      })
-      |> function.tap(fn(dependencies) {
-        case dependencies {
-          [] -> Nil
-          _else -> {
-            // Build documentation for the base project too
-            let _result =
-              []
-              |> CommandInput(flags: flags)
-              |> docs_build(task)
-            io.println("")
+  assert Parsed(toml) = task.config
+
+  try self =
+    ["name"]
+    |> toml.decode(from: toml, expect: dynamic.string)
+  let is_self = input.args == [] || input.args == [self]
+
+  try name = case is_self {
+    True -> Ok(self)
+    False if all ->
+      input.args
+      |> list.first
+      |> result.replace_error(snag.new("no package found"))
+    _else -> util.dependency(input.args)
+  }
+
+  let path = case is_self {
+    True -> "."
+    False ->
+      ["./build/packages/", name]
+      |> string.concat
+  }
+
+  let is_gleam =
+    [path, "/gleam.toml"]
+    |> string.concat
+    |> util.file_exists
+
+  case is_gleam {
+    True ->
+      ["docs", "build"]
+      |> shellout.command(
+        run: "gleam",
+        in: path,
+        opt: [LetBeStderr, LetBeStdout],
+      )
+      |> result.replace_error(snag.new("failed building docs"))
+      |> result.then(apply: fn(_output) {
+        case is_self {
+          True -> Ok("")
+          False -> {
+            let docs_dir = "./build/dev/docs/"
+            try _result = case util.is_directory(docs_dir) {
+              True -> Ok("")
+              False -> util.make_directory(docs_dir)
+            }
+            let new_path =
+              [docs_dir, name]
+              |> string.concat
+            try _result =
+              new_path
+              |> util.recursive_delete
+            [path, "/build/dev/docs/", name]
+            |> string.concat
+            |> util.rename(to: new_path)
           }
         }
       })
-      |> CommandInput(flags: flags)
+    False if all -> {
+      let _print =
+        [
+          "   Skipping"
+          |> shellout.style(with: shellout.color(["magenta"]), custom: []),
+          name,
+        ]
+        |> string.join(with: " ")
+        |> io.println
+      let _print =
+        [
+          "",
+          "No gleam.toml file was found in",
+          [path, "/"]
+          |> string.concat,
+        ]
+        |> string.join(with: "\n")
+        |> io.println
+      Ok("")
     }
-    False -> input
-  }
-  let args = input.args
-  let extra_args = case args {
-    [_, ..args] if args != [] -> Some(args)
-    _else -> None
-  }
-  try #(name, path) = case extra_args {
-    None if args == [] ->
-      #("", ".")
-      |> Ok
     _else ->
-      args
-      |> list.take(up_to: 1)
-      |> util.dependency
-      |> result.map(with: fn(name) {
-        #(name, string.concat(["./build/packages/", name]))
-      })
-  }
-  let result =
-    shellout.command(
-      run: "gleam",
-      with: ["docs", "build"],
-      in: path,
-      opt: [LetBeStderr, LetBeStdout],
-    )
-    |> result.replace_error(snag.new("task failed"))
-    |> result.then(apply: fn(_output) {
-      case path {
-        "." -> Ok("")
-        _else -> {
-          let new_path =
-            ["./build/dev/docs/", name]
-            |> string.concat
-          try _result = util.recursive_delete(new_path)
-          [path, "/build/dev/docs/", name]
-          |> string.concat
-          |> util.rename(to: new_path)
-        }
-      }
-    })
-  case extra_args {
-    Some(args) -> {
-      io.println("")
-      CommandInput(..input, args: args)
-      |> docs_build(task)
-    }
-    None -> result
+      ["`", name, "` is not a Gleam package\n"]
+      |> string.concat
+      |> snag.error
   }
 }
 
@@ -492,97 +505,47 @@ pub type Formatter {
   Formatter(name: String, check: List(String), run: List(String))
 }
 
-/// TODO: refactor with Iterable?
 /// TODO
 ///
 pub fn format(input: CommandInput, task: Task(Result)) -> Result {
-  let formatters = [
-    Formatter(
-      name: "gleam",
-      check: ["gleam", "format", "--check"],
-      run: ["gleam", "format"],
-    ),
-    ..formatters_from_config()
-    |> list.map(with: result.map_error(_, with: fn(snag) {
-      Snag(..snag, issue: "invalid `[[rad.formatters]]` in `gleam.toml`")
-      |> snag.pretty_print
-      |> string.trim
-      |> string.append(suffix: "\n")
-      |> io.println
-    }))
-    |> result.values
-  ]
+  assert Ok(flag.B(fail)) =
+    "fail"
+    |> flag.get_value(from: input.flags)
+  try _result = case fail {
+    True -> snag.error("invalid formatter in `gleam.toml`")
+    False -> Ok("")
+  }
 
+  try result =
+    map.new()
+    |> CommandInput(args: [])
+    |> task.basic(input.args)(task)
+    |> result.map_error(with: fn(_snag) {
+      assert Ok(flag.B(check)) =
+        "check"
+        |> flag.get_value(from: input.flags)
+      case check {
+        True -> "failed format check"
+        False -> "failed formatting"
+      }
+      |> snag.new
+    })
+
+  let [command, ..] = input.args
   assert Ok(flag.B(check)) =
     "check"
     |> flag.get_value(from: input.flags)
-  let #(action, extra, failure) = case check {
-    True -> #("   Checking", " formatting", "format check")
-    False -> #(" Formatting", "", "formatting")
+  let action = case check {
+    True -> "Checked"
+    False -> "Formatted"
   }
-
-  let errors =
-    formatters
-    |> list.filter_map(with: fn(formatter) {
-      [
-        action
-        |> shellout.style(with: shellout.color(["magenta"]), custom: []),
-        " ",
-        formatter.name,
-        extra,
-        "...",
-      ]
-      |> string.concat
-      |> io.println
-      let command = case check {
-        True -> formatter.check
-        False -> formatter.run
-      }
-      let result =
-        CommandInput(..input, flags: map.new())
-        |> task.basic(command)(task)
-        |> result.map_error(with: fn(_snag) {
-          string.concat(["`", formatter.name, "` formatter failed"])
-        })
-      case result {
-        Ok(_output) -> Error(Nil)
-        Error(message) -> Ok(message)
-      }
-    })
-  case errors {
-    [] -> Ok("")
-    _else -> {
-      io.println("")
-      [failure, " failed"]
-      |> string.concat
-      |> Snag(cause: errors)
-      |> Error
-    }
+  case command {
+    "gleam" ->
+      [action, "all files in `src` and `test`"]
+      |> string.join(with: " ")
+      |> Ok
+    _else -> Ok(result)
   }
-}
-
-/// TODO
-///
-fn formatters_from_config() -> List(gleam.Result(Formatter, Snag)) {
-  let dynamic_strings = fn(name) {
-    dynamic.field(named: name, of: dynamic.list(of: dynamic.string))
-  }
-  let requirements =
-    Formatter
-    |> dynamic.decode3(
-      dynamic.field(named: "name", of: dynamic.string),
-      dynamic_strings("check"),
-      dynamic_strings("run"),
-    )
-  let toml =
-    "gleam.toml"
-    |> toml.parse_file
-    |> result.lazy_unwrap(or: toml.new)
-
-  ["rad", "formatters"]
-  |> toml.decode(from: toml, expect: dynamic.list(of: toml.from_dynamic))
-  |> result.unwrap(or: [])
-  |> list.map(with: toml.decode(from: _, get: [], expect: requirements))
 }
 
 /// TODO
@@ -640,13 +603,8 @@ pub fn origin(_input: CommandInput, _task: Task(Result)) -> Result {
 ///
 pub fn ping(input: CommandInput, _task: Task(Result)) -> Result {
   try uri_string = case input.args {
-    [uri_string, ..] ->
-      uri_string
-      |> Ok
-    _else ->
-      "URI not provided"
-      |> snag.new
-      |> Error
+    [uri_string, ..] -> Ok(uri_string)
+    _else -> snag.error("URI not provided")
   }
   try uri =
     uri_string
@@ -797,8 +755,7 @@ if javascript {
       _else ->
         ["unsupported runtime `", runtime, "`"]
         |> string.concat
-        |> snag.new
-        |> Error
+        |> snag.error
     }
   }
 }

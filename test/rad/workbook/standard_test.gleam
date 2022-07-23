@@ -104,9 +104,7 @@ pub fn config_test() {
 }
 
 pub fn name_test() {
-  // TODO: swap out after implementation
-  //let flags = [flag.bool(called: "all", default: False, explained: "")]
-  let flags = []
+  let flags = [flag.bool(called: "all", default: False, explained: "")]
   // TODO: swap out after bugfix
   //let task =
   //  ["name"]
@@ -126,21 +124,11 @@ pub fn name_test() {
   stdlib
   |> should.not_equal(rad)
 
-  //assert Ok(all) =
-  //  ["--all"]
-  //  |> input(flags: flags)
-  //  |> run(task)
-  //
-  //all
-  //|> should.not_equal(rad)
-  //all
-  //|> string.contains(contain: rad)
-  //|> should.equal(True)
-  //all
-  //|> should.not_equal(stdlib)
-  //all
-  //|> string.contains(contain: stdlib)
-  //|> should.equal(True)
+  ["--all"]
+  |> input(flags: flags)
+  |> run(task)
+  |> should.be_ok
+
   [""]
   |> input(flags: flags)
   |> run(task)
@@ -211,9 +199,10 @@ pub fn tree_test() {
 }
 
 pub fn version_test() {
-  // TODO: swap out after implementation
-  //let flags = [flag.bool(called: "all", default: False, explained: "")]
-  let flags = [flag.bool(called: "bare", default: False, explained: "")]
+  let flags = [
+    flag.bool(called: "all", default: False, explained: ""),
+    flag.bool(called: "bare", default: False, explained: ""),
+  ]
   // TODO: swap out after bugfix
   //let task =
   //  ["version"]
@@ -244,21 +233,11 @@ pub fn version_test() {
   stdlib
   |> should.not_equal(rad)
 
-  //assert Ok(all) =
-  //  ["--all"]
-  //  |> input(flags: flags)
-  //  |> run(task)
-  //
-  //all
-  //|> should.not_equal(rad)
-  //all
-  //|> string.contains(contain: rad)
-  //|> should.equal(True)
-  //all
-  //|> should.not_equal(stdlib)
-  //all
-  //|> string.contains(contain: stdlib)
-  //|> should.equal(True)
+  ["--all"]
+  |> input(flags: flags)
+  |> run(task)
+  |> should.be_ok
+
   [""]
   |> input(flags: flags)
   |> run(task)

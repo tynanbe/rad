@@ -185,6 +185,15 @@ export function is_directory(pathname) {
   }
 }
 
+export function make_directory(pathname) {
+  try {
+    fs.mkdirSync(pathname);
+    return new Ok(Nil);
+  } catch (err) {
+    return new Error(err.code);
+  }
+}
+
 export function recursive_delete(pathname) {
   try {
     fs.rmSync(pathname, { force: true, recursive: true });
