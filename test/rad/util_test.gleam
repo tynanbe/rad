@@ -61,62 +61,6 @@ pub fn refuse_erlang_test() {
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
-// TOML Helper Functions                  //
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
-
-pub fn dependency_test() {
-  let name = "gleam_stdlib"
-  [name]
-  |> util.dependency
-  |> should.equal(Ok(name))
-
-  ["meowth"]
-  |> util.dependency
-  |> should.be_error
-
-  []
-  |> util.dependency
-  |> should.be_error
-}
-
-pub fn encode_json_test() {
-  False
-  |> util.encode_json
-  |> should.equal("false")
-
-  1
-  |> util.encode_json
-  |> should.equal("1")
-
-  2.3
-  |> util.encode_json
-  |> should.equal("2.3")
-
-  "4"
-  |> util.encode_json
-  |> should.equal("\"4\"")
-
-  toml.new()
-  |> util.encode_json
-  |> should.equal("{}")
-}
-
-pub fn packages_test() {
-  let name = "gleam_stdlib"
-  [name]
-  |> util.packages
-  |> should.be_ok
-
-  ["celebi"]
-  |> util.dependency
-  |> should.be_error
-
-  []
-  |> util.dependency
-  |> should.be_error
-}
-
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 // File System Functions                  //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
@@ -152,6 +96,28 @@ pub fn rename_test() {
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 // Miscellaneous Functions                //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+
+pub fn encode_json_test() {
+  False
+  |> util.encode_json
+  |> should.equal("false")
+
+  1
+  |> util.encode_json
+  |> should.equal("1")
+
+  2.3
+  |> util.encode_json
+  |> should.equal("2.3")
+
+  "4"
+  |> util.encode_json
+  |> should.equal("\"4\"")
+
+  toml.new()
+  |> util.encode_json
+  |> should.equal("{}")
+}
 
 pub fn relay_flags_test() {
   [

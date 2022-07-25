@@ -75,11 +75,12 @@ pub fn decode_test() {
   |> toml.decode(from: toml, expect: dynamic.string)
   |> should.equal(Ok("rad/workbook/standard"))
 
-  // TODO: uncomment for gleam_stdlib > 0.22.1
-  //["rad", "targets"]
+  ["rad", "targets"]
+  // TODO: swap for gleam_stdlib > 0.22.1
   //|> toml.decode(from: toml, expect: dynamic.list(of: dynamic.string))
-  //|> should.equal(Ok(["erlang", "javascript"]))
-  //
+  |> toml.decode(from: toml, expect: dynamic_list(of: dynamic.string))
+  |> should.equal(Ok(["erlang", "javascript"]))
+
   ["rad", "module"]
   |> toml.decode(from: toml, expect: dynamic.dynamic)
   |> should.be_ok
@@ -110,23 +111,26 @@ pub fn decode_every_test() {
   |> list.key_find(find: "licences")
   |> should.be_error
 
-  // TODO: uncomment for gleam_stdlib > 0.22.1
-  //assert Ok(tasks) =
-  //  ["rad", "tasks"]
-  //  |> toml.decode(from: toml, expect: dynamic.list(of: toml.from_dynamic))
-  //
-  //tasks
-  //|> list.find(one_that: fn(task) {
-  //  assert Ok(lists) =
-  //    []
-  //    |> toml.decode_every(from: task, expect: dynamic.list(of: dynamic.string))
-  //  assert Ok(path) =
-  //    "path"
-  //    |> list.key_find(in: lists)
-  //  path == ["sparkles"]
-  //})
-  //|> should.be_ok
-  //
+  assert Ok(tasks) =
+    ["rad", "tasks"]
+    // TODO: swap for gleam_stdlib > 0.22.1
+    //|> toml.decode(from: toml, expect: dynamic.list(of: toml.from_dynamic))
+    |> toml.decode(from: toml, expect: dynamic_list(of: toml.from_dynamic))
+
+  tasks
+  |> list.find(one_that: fn(task) {
+    assert Ok(lists) =
+      []
+      // TODO: swap for gleam_stdlib > 0.22.1
+      //|> toml.decode_every(from: task, expect: dynamic.list(of: dynamic.string))
+      |> toml.decode_every(from: task, expect: dynamic_list(of: dynamic.string))
+    assert Ok(path) =
+      "path"
+      |> list.key_find(in: lists)
+    path == ["sparkles"]
+  })
+  |> should.be_ok
+
   ["rad"]
   |> toml.decode_every(from: toml, expect: dynamic.dynamic)
   |> should.be_ok
@@ -138,4 +142,52 @@ pub fn decode_every_test() {
   ["rad", "gloom"]
   |> toml.decode_every(from: toml, expect: dynamic.dynamic)
   |> should.be_error
+}
+
+// TODO: remove for gleam_stdlib > 0.22.1
+fn dynamic_list(
+  of decoder_type: fn(dynamic.Dynamic) -> Result(a, dynamic.DecodeErrors),
+) -> dynamic.Decoder(List(a)) {
+  do_dynamic_list(decoder_type)
+}
+
+if erlang {
+  fn do_dynamic_list(decoder_type) {
+    dynamic.list(of: decoder_type)
+  }
+}
+
+if javascript {
+  import gleam/int
+  import gleam/string
+
+  fn do_dynamic_list(decoder_type) {
+    fn(dynamic) {
+      try list = decode_list(dynamic)
+      list
+      |> list.try_map(decoder_type)
+      |> result.map_error(with: list.map(_, with: push_path(_, "*")))
+    }
+  }
+
+  fn push_path(error, name) {
+    let name = dynamic.from(name)
+    let decoder =
+      dynamic.any([
+        dynamic.string,
+        fn(x) { result.map(dynamic.int(x), int.to_string) },
+      ])
+    let name = case decoder(name) {
+      Ok(name) -> name
+      Error(_) ->
+        ["<", dynamic.classify(name), ">"]
+        |> string.concat
+    }
+    dynamic.DecodeError(..error, path: [name, ..error.path])
+  }
+
+  external fn decode_list(
+    dynamic.Dynamic,
+  ) -> Result(List(dynamic.Dynamic), dynamic.DecodeErrors) =
+    "../rad_ffi.mjs" "tmp_decode_list"
 }

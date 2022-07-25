@@ -19,13 +19,13 @@ import glint/flag
 import rad
 import rad/task.{
   Parsed, Result, Task, arguments, delimit, flag, flags, for, formatters, gleam,
-  new, or, packages, parameter, shortdoc, targets, with_config,
+  new, or, packages, parameter, shortdoc, targets, with_config, with_manifest,
 }
-import rad/toml
+import rad/toml.{Toml}
 import rad/util
 import rad/workbook.{Workbook, help, task}
 import shellout.{LetBeStderr, LetBeStdout, StyleFlags}
-import snag
+import snag.{Snag}
 
 if erlang {
   import gleam/http/request
@@ -75,7 +75,9 @@ pub fn workbook() -> Workbook {
 
   let target_flags = [
     ["rad", "targets"]
-    |> toml.decode(from: toml, expect: dynamic.list(of: dynamic.string))
+    // TODO: swap for gleam_stdlib > 0.22.1
+    //|> toml.decode(from: toml, expect: dynamic.list(of: dynamic.string))
+    |> toml.decode(from: toml, expect: dynamic_list(of: dynamic.string))
     |> result.lazy_or(fn() {
       ["target"]
       |> toml.decode(from: toml, expect: dynamic.string)
@@ -328,7 +330,8 @@ pub fn workbook() -> Workbook {
       with: "..[packages]",
       of: "Package name(s) (default: current project)",
     )
-    |> with_config,
+    |> with_config
+    |> with_manifest,
   )
   |> task(
     add: ["watch"]
@@ -372,9 +375,9 @@ pub fn root(input: CommandInput, task: Task(Result)) -> Result {
 /// TODO
 ///
 pub fn config(input: CommandInput, task: Task(Result)) -> Result {
-  assert Parsed(toml) = task.config
+  assert Parsed(config) = task.config
   input.args
-  |> toml.decode(from: toml, expect: dynamic.dynamic)
+  |> toml.decode(from: config, expect: dynamic.dynamic)
   |> result.map(with: util.encode_json)
 }
 
@@ -384,21 +387,24 @@ pub fn docs_build(input: CommandInput, task: Task(Result)) -> Result {
   assert Ok(flag.B(all)) =
     "all"
     |> flag.get_value(from: input.flags)
-  assert Parsed(toml) = task.config
 
-  try self =
-    ["name"]
-    |> toml.decode(from: toml, expect: dynamic.string)
-  let is_self = input.args == [] || input.args == [self]
-
-  try name = case is_self {
-    True -> Ok(self)
-    False if all ->
-      input.args
-      |> list.first
-      |> result.replace_error(snag.new("no package found"))
-    _else -> util.dependency(input.args)
-  }
+  try #(name, is_self) =
+    self_or_dependency(
+      input,
+      task,
+      self: fn(self, _config) { Ok(self) },
+      or: fn(config) {
+        case all {
+          True ->
+            input.args
+            |> list.first
+            |> result.replace_error(snag.new("no package found"))
+          False ->
+            input.args
+            |> dependency_name(from: config)
+        }
+      },
+    )
 
   let path = case is_self {
     True -> "."
@@ -551,19 +557,17 @@ pub fn format(input: CommandInput, task: Task(Result)) -> Result {
 /// TODO
 ///
 pub fn name(input: CommandInput, task: Task(Result)) -> Result {
-  assert Parsed(toml) = task.config
-  try self =
-    ["name"]
-    |> toml.decode(from: toml, expect: dynamic.string)
-  case input.args == [] || input.args == [self] {
-    True -> Ok(self)
-    False -> util.dependency(input.args)
-  }
-  |> result.map(with: shellout.style(
-    _,
-    with: style_flags(input.flags),
-    custom: util.lookups,
-  ))
+  try #(name, _is_self) =
+    self_or_dependency(
+      input,
+      task,
+      self: fn(self, _config) { Ok(self) },
+      or: dependency_name(input.args, from: _),
+    )
+
+  name
+  |> shellout.style(with: style_flags(input.flags), custom: util.lookups)
+  |> Ok
 }
 
 /// Filters the flags from a
@@ -590,12 +594,8 @@ fn style_flags(flags: flag.Map) -> StyleFlags {
 /// TODO
 ///
 pub fn origin(_input: CommandInput, _task: Task(Result)) -> Result {
-  shellout.command(
-    run: "git",
-    with: ["remote", "get-url", "origin"],
-    in: ".",
-    opt: [],
-  )
+  ["remote", "get-url", "origin"]
+  |> shellout.command(run: "git", in: ".", opt: [])
   |> result.replace_error(snag.new("git remote `origin` not found"))
 }
 
@@ -719,10 +719,10 @@ if javascript {
 
     case runtime {
       "elixir" | "iex" -> {
-        assert Parsed(toml) = task.config
+        assert Parsed(config) = task.config
         try name =
           ["name"]
-          |> toml.decode(from: toml, expect: dynamic.string)
+          |> toml.decode(from: config, expect: dynamic.string)
         try ebins =
           util.ebin_paths()
           |> result.replace_error(snag.new("failed to find `ebin` paths"))
@@ -809,7 +809,6 @@ pub fn version(input: CommandInput, task: Task(Result)) -> Result {
   assert Ok(flag.B(bare)) =
     "bare"
     |> flag.get_value(from: input.flags)
-  assert Parsed(toml) = task.config
 
   try name = case bare {
     True -> Ok(None)
@@ -819,15 +818,41 @@ pub fn version(input: CommandInput, task: Task(Result)) -> Result {
       |> result.map(with: Some)
   }
 
-  try self =
-    ["name"]
-    |> toml.decode(from: toml, expect: dynamic.string)
-  try version = case input.args == [] || input.args == [self] {
-    True ->
-      ["version"]
-      |> toml.decode(from: toml, expect: dynamic.string)
-    False -> util.packages(input.args)
-  }
+  try #(version, _is_self) =
+    self_or_dependency(
+      input,
+      task,
+      self: fn(_self, config) {
+        ["version"]
+        |> toml.decode(from: config, expect: dynamic.string)
+      },
+      or: fn(_config) {
+        assert Parsed(manifest) = task.manifest
+        ["packages"]
+        // TODO: swap for gleam_stdlib > 0.22.1
+        //|> toml.decode(from: manifest, expect: dynamic.list(of: toml.from_dynamic))
+        |> toml.decode(
+          from: manifest,
+          expect: dynamic_list(of: toml.from_dynamic),
+        )
+        |> result.unwrap(or: [])
+        |> list.find_map(with: fn(toml) {
+          let decode = toml.decode(_, from: toml, expect: dynamic.string)
+          try name = decode(["name"])
+          case [name] == input.args {
+            True -> decode(["version"])
+            False -> snag.error("")
+          }
+        })
+        |> result.map_error(with: fn(_nil) {
+          let [name] = input.args
+          ["dependency `", name, "` not found"]
+          |> string.concat
+          |> snag.new
+        })
+      },
+    )
+
   let version =
     case bare {
       True -> version
@@ -1068,4 +1093,87 @@ fn hello_lucy(input: CommandInput, _task: Task(Result)) -> Result {
   ]
   |> string.join(with: "\n")
   |> Ok
+}
+
+fn dependency_name(path: List(String), from config: Toml) {
+  let [name] = path
+  let is_dep = fn(which_deps) {
+    [which_deps, name]
+    |> toml.decode(from: config, expect: dynamic.string)
+  }
+  try _version =
+    "dependencies"
+    |> is_dep
+    |> result.lazy_or(fn() { is_dep("dev-dependencies") })
+    |> result.map_error(with: fn(_snag) {
+      ["dependency `", name, "` not found"]
+      |> string.concat
+      |> snag.new
+    })
+  Ok(name)
+}
+
+fn self_or_dependency(
+  input: CommandInput,
+  task: Task(Result),
+  self self_fun: fn(String, Toml) -> Result,
+  or dep_fun: fn(Toml) -> Result,
+) -> gleam.Result(#(String, Bool), Snag) {
+  assert Parsed(config) = task.config
+
+  try self =
+    ["name"]
+    |> toml.decode(from: config, expect: dynamic.string)
+  let is_self = input.args == [] || input.args == [self]
+
+  case is_self {
+    True -> self_fun(self, config)
+    False -> dep_fun(config)
+  }
+  |> result.map(with: fn(item) { #(item, is_self) })
+}
+
+// TODO: remove for gleam_stdlib > 0.22.1
+fn dynamic_list(
+  of decoder_type: fn(dynamic.Dynamic) -> gleam.Result(a, dynamic.DecodeErrors),
+) -> dynamic.Decoder(List(a)) {
+  do_dynamic_list(decoder_type)
+}
+
+if erlang {
+  fn do_dynamic_list(decoder_type) {
+    dynamic.list(of: decoder_type)
+  }
+}
+
+if javascript {
+  fn do_dynamic_list(decoder_type) {
+    fn(dynamic) {
+      try list = decode_list(dynamic)
+      list
+      |> list.try_map(decoder_type)
+      |> result.map_error(with: list.map(_, with: push_path(_, "*")))
+    }
+  }
+
+  fn push_path(error, name) {
+    let name = dynamic.from(name)
+    let decoder =
+      dynamic.any([
+        dynamic.string,
+        fn(x) { result.map(dynamic.int(x), int.to_string) },
+      ])
+    let name = case decoder(name) {
+      Ok(name) -> name
+      Error(_) ->
+        ["<", dynamic.classify(name), ">"]
+        |> string.concat
+    }
+    dynamic.DecodeError(..error, path: [name, ..error.path])
+  }
+
+  external fn decode_list(
+    dynamic.Dynamic,
+  ) -> gleam.Result(List(dynamic.Dynamic), dynamic.DecodeErrors) =
+    "../../rad_ffi.mjs" "tmp_decode_list"
 }

@@ -1,5 +1,12 @@
-import { Error, Ok, toList } from "./gleam.mjs";
-import { classify_dynamic } from "../../gleam_stdlib/dist/gleam_stdlib.mjs";
+// TODO: swap for gleam_stdlib > 0.22.1
+//import { Error, Ok, toList } from "./gleam.mjs";
+import { Error, List, Ok, toList } from "./gleam.mjs";
+// TODO: swap for gleam_stdlib > 0.22.1
+//import { classify_dynamic } from "../../gleam_stdlib/dist/gleam_stdlib.mjs";
+import {
+  classify_dynamic,
+  decode_list,
+} from "../../gleam_stdlib/dist/gleam_stdlib.mjs";
 import { DecodeError } from "../../gleam_stdlib/dist/gleam/dynamic.mjs";
 import * as TOML from "../priv/node_modules/@ltd/j-toml/index.mjs";
 import * as fs from "fs";
@@ -113,6 +120,14 @@ export function watch_loop(watch_fun, do_fun) {
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 // TOML Functions                         //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+
+// TODO: remove for gleam_stdlib > 0.22.1
+export function tmp_decode_list(data) {
+  if (Array.isArray(data)) {
+    return new Ok(List.fromArray(data));
+  }
+  return decode_list(data);
+}
 
 export function decode_object(data) {
   if (typeof data === "object" && !Array.isArray(data) && null !== data) {

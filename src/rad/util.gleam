@@ -13,7 +13,6 @@ import gleam/string
 import gleam/string_builder
 import glint.{CommandInput}
 import glint/flag
-import rad/toml
 import shellout.{CommandOpt, LetBeStderr, LetBeStdout, Lookups}
 import snag.{Snag}
 
@@ -22,7 +21,8 @@ if erlang {
   import gleam/erlang/file
 }
 
-/// TODO
+/// Custom color [`Lookups`](https://hexdocs.pm/shellout/shellout.html#Lookups)
+/// for `rad`.
 ///
 pub const lookups: Lookups = [
   #(
@@ -43,11 +43,13 @@ pub const lookups: Lookups = [
 // Runtime Functions                      //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
-/// TODO
+/// The base path for `rad`'s compiled JavaScript modules.
 ///
 pub const rad_path = "./build/dev/javascript/rad"
 
-/// TODO
+/// Runs Erlang with the given arguments and shellout
+/// [`CommandOpt`](https://hexdocs.pm/shellout/shellout.html#CommandOpt)s. All
+/// dependency and project modules are preloaded and accessible.
 ///
 pub fn erlang_run(
   with args: List(String),
@@ -63,7 +65,8 @@ pub fn erlang_run(
   })
 }
 
-/// TODO
+/// Results in a list of paths comprising all compiled Erlang modules for a
+/// project and its dependencies on success, or `Nil` on failure.
 ///
 pub fn ebin_paths() -> Result(List(String), Nil) {
   do_ebin_paths()
@@ -87,7 +90,9 @@ if javascript {
     "../rad_ffi.mjs" "ebin_paths"
 }
 
-/// TODO
+/// Runs Node.js with the given arguments and shellout
+/// [`CommandOpt`](https://hexdocs.pm/shellout/shellout.html#CommandOpt)s. All
+/// dependency and project modules are preloaded and accessible.
 ///
 pub fn javascript_run(
   with args: List(String),
@@ -98,8 +103,8 @@ pub fn javascript_run(
   |> result.replace_error(snag.new("failed to run `node`"))
 }
 
-/// Results in an error meant to notify users that a task cannot be carried out
-/// using the Erlang runtime.
+/// Results in an error meant to notify users that a [`Task`](task.html#Task)
+/// cannot be carried out using the Erlang runtime.
 ///
 pub fn refuse_erlang() -> Result(String, Snag) {
   "task cannot be run with erlang"
@@ -108,57 +113,11 @@ pub fn refuse_erlang() -> Result(String, Snag) {
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
-// TOML Helper Functions                  //
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
-
-/// Results in the name of an installed dependency on success, or an error on
-/// failure, such as when the depency isn't found.
-///
-pub fn dependency(args: List(String)) -> Result(String, Snag) {
-  try _version =
-    args
-    |> packages
-    |> result.map_error(with: fn(_snag) {
-      ["dependency `", string.join(args, with: "."), "` not found"]
-      |> string.concat
-      |> snag.new
-    })
-  let [name] = args
-  Ok(name)
-}
-
-/// TODO
-///
-pub fn encode_json(data: a) -> String {
-  do_encode_json(data)
-}
-
-if erlang {
-  external fn do_encode_json(a) -> String =
-    "thoas" "encode"
-}
-
-if javascript {
-  external fn do_encode_json(a) -> String =
-    "" "globalThis.JSON.stringify"
-}
-
-/// TODO
-///
-pub fn packages(path: List(String)) -> Result(String, Snag) {
-  try toml =
-    "build/packages/packages.toml"
-    |> toml.parse_file
-
-  ["packages", ..path]
-  |> toml.decode(from: toml, expect: dynamic.string)
-}
-
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 // File System Functions                  //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
-/// TODO
+/// Returns a boolean indicating whether or not a file exists at the given
+/// `path`.
 ///
 pub fn file_exists(path: String) -> Bool {
   do_file_exists(path)
@@ -176,7 +135,10 @@ if javascript {
     "" "globalThis.fs.existsSync"
 }
 
-/// TODO
+/// Tries to write some `contents` to a file at the given `path`.
+///
+/// Results in an empty string on success, or a
+/// [`Snag`](https://hexdocs.pm/snag/snag.html#Snag) on failure.
 ///
 pub fn file_write(
   contents contents: String,
@@ -203,7 +165,8 @@ if javascript {
     "../rad_ffi.mjs" "file_write"
 }
 
-/// TODO
+/// Returns a boolean indicating whether or not a directory exists at the given
+/// `path`.
 ///
 pub fn is_directory(path: String) -> Bool {
   do_is_directory(path)
@@ -220,7 +183,12 @@ if javascript {
     "../rad_ffi.mjs" "is_directory"
 }
 
-/// TODO
+/// Tries to create a new directory at the given `path`.
+///
+/// No attempt is made to create any missing parent directories.
+///
+/// Results in an empty string on success, or a
+/// [`Snag`](https://hexdocs.pm/snag/snag.html#Snag) on failure.
 ///
 pub fn make_directory(path: String) -> Result(String, Snag) {
   path
@@ -244,7 +212,13 @@ if javascript {
     "../rad_ffi.mjs" "make_directory"
 }
 
-/// TODO
+/// Tries to recursively delete the given `path`.
+///
+/// If the `path` is a directory, it will be deleted along with all of its
+/// contents.
+///
+/// Results in an empty string on success, or a
+/// [`Snag`](https://hexdocs.pm/snag/snag.html#Snag) on failure.
 ///
 pub fn recursive_delete(path: String) -> Result(String, Snag) {
   path
@@ -268,7 +242,10 @@ if javascript {
     "../rad_ffi.mjs" "recursive_delete"
 }
 
-/// TODO
+/// Tries to move a given `source` path to a new location.
+///
+/// Results in an empty string on success, or a
+/// [`Snag`](https://hexdocs.pm/snag/snag.html#Snag) on failure.
 ///
 pub fn rename(from source: String, to dest: String) -> Result(String, Snag) {
   source
@@ -320,7 +297,8 @@ if javascript {
     "../rad_ffi.mjs" "rename"
 }
 
-/// TODO
+/// Results in the current working directory path on success, or a
+/// [`Snag`](https://hexdocs.pm/snag/snag.html#Snag) on failure.
 ///
 pub fn working_directory() -> Result(String, Snag) {
   do_working_directory()
@@ -341,7 +319,24 @@ if javascript {
 // Miscellaneous Functions                //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
-/// Turn a snag into a multi-line string, optimised for readability.
+/// Returns a JSON string representation for any given data.
+///
+pub fn encode_json(data: a) -> String {
+  do_encode_json(data)
+}
+
+if erlang {
+  external fn do_encode_json(a) -> String =
+    "thoas" "encode"
+}
+
+if javascript {
+  external fn do_encode_json(a) -> String =
+    "" "globalThis.JSON.stringify"
+}
+
+/// Turns a [`Snag`](https://hexdocs.pm/snag/snag.html#Snag) into a multiline
+/// string optimized for readability.
 ///
 pub fn snag_pretty_print(snag: Snag) -> String {
   let builder =
@@ -401,7 +396,12 @@ fn bold(string, and colors: List(String)) -> String {
   )
 }
 
-/// TODO
+/// Reconstructs a list of strings from a processed flag
+/// [`Map`](https://hexdocs.pm/glint/glint/flag.html#Map).
+///
+/// Useful for relaying the processed flags from a
+/// [`CommandInput`](https://hexdocs.pm/glint/glint.html#CommandInput) to a new
+/// process.
 ///
 pub fn relay_flags(flags: flag.Map) -> List(String) {
   flags
@@ -436,7 +436,7 @@ pub fn relay_flags(flags: flag.Map) -> List(String) {
   })
 }
 
-/// TODO
+/// Returns the path of a runnable `rad` invocation script.
 ///
 pub fn which_rad() -> String {
   let or_try = fn(first, executable) {
@@ -467,16 +467,21 @@ pub fn which_rad() -> String {
 
 const test_flag = "rad-test"
 
-/// TODO
-///
-pub fn delete_test_flag(input: CommandInput) -> CommandInput {
-  let flags =
-    test_flag
-    |> map.delete(from: input.flags)
-  CommandInput(..input, flags: flags)
-}
+//pub fn delete_test_flag(input: CommandInput) -> CommandInput {
+//  let flags =
+//    test_flag
+//    |> map.delete(from: input.flags)
+//  CommandInput(..input, flags: flags)
+//}
 
-/// TODO
+/// Removes from the given `input` a flag specific to running `rad`'s unit
+/// tests.
+///
+/// Returns a function that does nothing if `rad`'s test flag is present in the
+/// given `input`, otherwise
+/// [`io.print`](https://hexdocs.pm/gleam_stdlib/gleam/io.html#print).
+///
+/// Useful for suppressing output while running `rad`'s unit tests.
 ///
 pub fn quiet_or_print(input: CommandInput) -> fn(String) -> Nil {
   case is_test(input) {
@@ -485,7 +490,11 @@ pub fn quiet_or_print(input: CommandInput) -> fn(String) -> Nil {
   }
 }
 
-/// TODO
+/// Returns a function that does nothing if `rad`'s test flag is present in the
+/// given `input`, otherwise
+/// [`io.println`](https://hexdocs.pm/gleam_stdlib/gleam/io.html#println).
+///
+/// Useful for suppressing output while running `rad`'s unit tests.
 ///
 pub fn quiet_or_println(input: CommandInput) -> fn(String) -> Nil {
   case is_test(input) {
@@ -494,7 +503,12 @@ pub fn quiet_or_println(input: CommandInput) -> fn(String) -> Nil {
   }
 }
 
-/// TODO
+/// Instructs a
+/// [`shellout.command`](https://hexdocs.pm/shellout/shellout.html#command) to
+/// capture all output if `rad`'s test flag is present in the given `input`,
+/// otherwise spawns the subprocess with stdout and stderr piped to its parent.
+///
+/// Useful for suppressing output while running `rad`'s unit tests.
 ///
 pub fn quiet_or_spawn(input: CommandInput) -> List(CommandOpt) {
   case is_test(input) {

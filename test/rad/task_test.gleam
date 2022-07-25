@@ -8,7 +8,7 @@ import gleam/string
 import gleeunit/should
 import glint.{CommandInput}
 import glint/flag
-import rad/task.{Config, Each, NoConfig, Once, Parsed, Result, Task}
+import rad/task.{Each, Expected, None, Once, Parsed, Result, Task}
 import rad/toml
 import rad/util
 import rad/workbook
@@ -52,7 +52,10 @@ pub fn builder_test() {
   |> should.equal([])
 
   builder.config
-  |> should.equal(NoConfig)
+  |> should.equal(None)
+
+  builder.manifest
+  |> should.equal(None)
 
   // Update
   let delimiter = ","
@@ -92,6 +95,7 @@ pub fn builder_test() {
     |> task.parameters(add: parameters)
     |> task.parameter(with: parameter4.0, of: parameter4.1)
     |> task.with_config
+    |> task.with_manifest
 
   builder.path
   |> should.equal(path)
@@ -119,7 +123,10 @@ pub fn builder_test() {
   |> should.equal(builder.parameters)
 
   builder.config
-  |> should.equal(Config)
+  |> should.equal(Expected)
+
+  builder.manifest
+  |> should.equal(Expected)
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
@@ -150,16 +157,14 @@ pub fn formatters_test() {
     iterable_builder()
     |> task.for(each: task.formatters)
 
-  assert Each(get: _items_fun, map: mapper) = builder.for
-  // TODO: uncomment for gleam_stdlib > 0.22.1
-  //assert Each(get: items_fun, map: mapper) = builder.for
-  //
-  //case items_fun(input, builder) {
-  //  [_gleam, _javascript, ..] -> True
-  //  _else -> False
-  //}
-  //|> should.be_true
-  //
+  assert Each(get: items_fun, map: mapper) = builder.for
+
+  case items_fun(input, builder) {
+    [_gleam, _javascript, ..] -> True
+    _else -> False
+  }
+  |> should.be_true
+
   let item = mapper(input, builder, 0, ["0"])
 
   case item.args {
@@ -315,6 +320,33 @@ pub fn config_test() {
   |> should.be_error
 }
 
+pub fn manifest_test() {
+  let runner = fn(_input, task: Task(Result)) {
+    case task.manifest {
+      Parsed(toml) ->
+        []
+        |> toml.decode(from: toml, expect: dynamic.dynamic)
+        |> result.map(with: util.encode_json)
+      _else -> Error(snag.new(""))
+    }
+  }
+
+  let builder =
+    []
+    |> task.new(run: runner)
+    |> task.with_manifest
+  empty_input()
+  |> run(builder)
+  |> should.be_ok
+
+  let builder =
+    []
+    |> task.new(run: runner)
+  empty_input()
+  |> run(builder)
+  |> should.be_error
+}
+
 pub fn basic_test() {
   let builder =
     []
@@ -426,39 +458,52 @@ pub fn trainer_test() {
   |> input(flags: [])
   |> run(builder)
   |> should.equal(Ok("rad"))
+
+  let builder =
+    []
+    |> task.new(run: fn(input, task) {
+      assert Parsed(toml) = task.manifest
+      input.args
+      |> toml.decode(from: toml, expect: dynamic.string)
+    })
+    |> task.with_manifest
+
+  ["requirements", "gleam_stdlib"]
+  |> input(flags: [])
+  |> run(builder)
+  |> should.be_ok
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 // Miscellaneous Functions                //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
-// TODO: uncomment for gleam_stdlib > 0.22.1
-//pub fn tasks_from_config_test() {
-//  let tasks =
-//    task.tasks_from_config()
-//    |> result.values
-//
-//  tasks
-//  |> list.find(one_that: fn(task) {
-//    case task.path {
-//      [_at_least, _two, ..] -> True
-//      _else -> False
-//    }
-//  })
-//  |> should.be_ok
-//
-//  tasks
-//  |> list.find(one_that: fn(task) { task.shortdoc != "" })
-//  |> should.be_ok
-//
-//  tasks
-//  |> list.map(with: fn(builder) {
-//    empty_input()
-//    |> run(builder)
-//  })
-//  |> result.all
-//  |> should.be_ok
-//}
+pub fn tasks_from_config_test() {
+  let tasks =
+    task.tasks_from_config()
+    |> result.values
+
+  tasks
+  |> list.find(one_that: fn(task) {
+    case task.path {
+      [_at_least, _two, ..] -> True
+      _else -> False
+    }
+  })
+  |> should.be_ok
+
+  tasks
+  |> list.find(one_that: fn(task) { task.shortdoc != "" })
+  |> should.be_ok
+
+  tasks
+  |> list.map(with: fn(builder) {
+    empty_input()
+    |> run(builder)
+  })
+  |> result.all
+  |> should.be_ok
+}
 
 pub fn sort_test() {
   let [head, ..rest] =

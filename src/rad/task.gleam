@@ -26,10 +26,11 @@ import snag.{Snag}
 /// A `Task` can be conveniently built up using the following functions:
 /// [`new`](#new), followed by any number of [`shortdoc`](#shortdoc),
 /// [`flag`](#flag), [`flags`](#flags), [`parameter`](#parameter),
-/// [`parameters`](#parameters), [`with_config`](#with_config), and
-/// [`for`](#for) combined with [`arguments`](#arguments),
-/// [`targets`](#targets), or a custom [`Iterable`](#Iterable)-generating
-/// function.
+/// [`parameters`](#parameters), [`with_config`](#with_config),
+/// [`with_manifest`](#with_manifest), and [`for`](#for) combined with
+/// [`arguments`](#arguments), [`formatters`](#formatters),
+/// [`packages`](#packages), [`targets`](#targets), [`or`](#or), or a custom
+/// [`Iterable`](#Iterable)-generating function.
 ///
 /// Any number of tasks can be added to a [`new`](workbook.html#new) or existing
 /// [`Workbook`](workbook.html#Workbook), such as the standard
@@ -46,7 +47,8 @@ pub type Task(a) {
     shortdoc: String,
     flags: List(Flag),
     parameters: List(#(String, String)),
-    config: Config,
+    config: Parser,
+    manifest: Parser,
   )
 }
 
@@ -79,21 +81,22 @@ pub type Iterable(a) {
   Once
 }
 
-/// A value for the `config` field of every [`Task`](#Task).
+/// A value for the `config` and `manifest` fields of every [`Task`](#Task).
 ///
 /// A [`new`](#new) [`Task`](#Task) defined in a
 /// [`Workbook`](workbook.html#Workbook), won't ask its [`Runner`](#Runner) to
-/// access the `gleam.toml` configuration file (`NoConfig`). This can be changed
-/// using the [`with_config`](#with_config) builder function (`Config`).
+/// access the `gleam.toml` or `manifest.toml` files (`None`). This can be
+/// changed using the [`with_config`](#with_config) and/or
+/// [`with_manifest`](#with_manifest) builder functions (`Expected`).
 ///
 /// At runtime, when a [`Runner`](#Runner) sees that its [`Task`](#Task) needs
-/// the [`Toml`](toml.html#Toml) data, it can fetch it once and use it as needed
-/// (`Parsed`). A [`trainer`](#trainer) does this for its [`Runner`](#Runner)
-/// automatically.
+/// some [`Toml`](toml.html#Toml) data, it can fetch it once (`Parsed`) and use
+/// it repeatedly . A [`trainer`](#trainer) does this for its
+/// [`Runner`](#Runner) automatically.
 ///
-pub type Config {
-  Config
-  NoConfig
+pub type Parser {
+  Expected
+  None
   Parsed(Toml)
 }
 
@@ -135,7 +138,8 @@ pub fn new(at path: List(String), run runner: Runner(Result)) -> Task(Result) {
     shortdoc: "",
     flags: [],
     parameters: [],
-    config: NoConfig,
+    config: None,
+    manifest: None,
   )
 }
 
@@ -239,7 +243,19 @@ pub fn shortdoc(into task: Task(a), insert description: String) -> Task(a) {
 /// [`Runner`](#Runner) automatically.
 ///
 pub fn with_config(task: Task(a)) -> Task(a) {
-  Task(..task, config: Config)
+  Task(..task, config: Expected)
+}
+
+/// Returns a new [`Task`](#Task) that wants the `manifest.toml` file's
+/// [`Parsed`](#Config) [`Toml`](toml.html#Toml) data, to be used by the
+/// [`Task`](#Task)'s [`Runner`](#Runner).
+///
+/// Note that a [`Runner`](#Runner) will need to handle this requirement at
+/// runtime in order to succeed. A [`trainer`](#trainer) does this for its
+/// [`Runner`](#Runner) automatically.
+///
+pub fn with_manifest(task: Task(a)) -> Task(a) {
+  Task(..task, manifest: Expected)
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
@@ -284,7 +300,9 @@ pub fn or(
       _else -> {
         let [item] = item
         item
-        |> json.decode(using: dynamic.list(of: dynamic.string))
+        // TODO: swap for gleam_stdlib > 0.22.1
+        //|> json.decode(using: dynamic.list(of: dynamic.string))
+        |> json.decode(using: dynamic_list(of: dynamic.string))
         |> result.unwrap(or: [])
         |> CommandInput(flags: input.flags)
       }
@@ -395,9 +413,9 @@ pub fn formatters() -> Iterable(a) {
 }
 
 fn formatters_from_config() -> List(gleam.Result(Formatter, Snag)) {
-  let dynamic_strings = fn(name) {
-    dynamic.field(named: name, of: dynamic.list(of: dynamic.string))
-  }
+  let dynamic_strings = fn(name) { // TODO: swap for gleam_stdlib > 0.22.1
+    //dynamic.field(named: name, of: dynamic.list(of: dynamic.string))
+    dynamic.field(named: name, of: dynamic_list(of: dynamic.string)) }
   let requirements =
     Formatter
     |> dynamic.decode3(
@@ -411,7 +429,9 @@ fn formatters_from_config() -> List(gleam.Result(Formatter, Snag)) {
     |> result.lazy_unwrap(or: toml.new)
 
   ["rad", "formatters"]
-  |> toml.decode(from: toml, expect: dynamic.list(of: toml.from_dynamic))
+  // TODO: swap for gleam_stdlib > 0.22.1
+  //|> toml.decode(from: toml, expect: dynamic.list(of: toml.from_dynamic))
+  |> toml.decode(from: toml, expect: dynamic_list(of: toml.from_dynamic))
   |> result.unwrap(or: [])
   |> list.map(with: toml.decode(from: _, get: [], expect: requirements))
 }
@@ -543,14 +563,14 @@ pub fn trainer(runner: Runner(Result)) -> Runner(Result) {
   fn(input, task: Task(Result)) {
     let io_print = util.quiet_or_print(input)
     let config = case task.config {
-      Config ->
-        "gleam.toml"
-        |> toml.parse_file
-        |> result.lazy_unwrap(or: toml.new)
-        |> Parsed
+      Expected -> parse("gleam.toml")
       _else -> task.config
     }
-    let task = Task(..task, config: config)
+    let manifest = case task.manifest {
+      Expected -> parse("manifest.toml")
+      _else -> task.manifest
+    }
+    let task = Task(..task, config: config, manifest: manifest)
 
     let #(items, mapper) = case task.for {
       Each(get: items_fun, map: mapper) -> #(items_fun(input, task), mapper)
@@ -642,6 +662,13 @@ pub fn trainer(runner: Runner(Result)) -> Runner(Result) {
   }
 }
 
+fn parse(path: String) -> Parser {
+  path
+  |> toml.parse_file
+  |> result.lazy_unwrap(or: toml.new)
+  |> Parsed
+}
+
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 // Miscellaneous Functions                //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
@@ -679,9 +706,9 @@ fn remove_common_path(a: List(String), b: List(String)) -> #(String, String) {
 /// optionally have a `shortdoc` key/value.
 ///
 pub fn tasks_from_config() -> List(gleam.Result(Task(Result), Snag)) {
-  let dynamic_strings = fn(name) {
-    dynamic.field(named: name, of: dynamic.list(of: dynamic.string))
-  }
+  let dynamic_strings = fn(name) { // TODO: swap for gleam_stdlib > 0.22.1
+    //dynamic.field(named: name, of: dynamic.list(of: dynamic.string))
+    dynamic.field(named: name, of: dynamic_list(of: dynamic.string)) }
   let requirements =
     fn(path, command) {
       path
@@ -692,10 +719,9 @@ pub fn tasks_from_config() -> List(gleam.Result(Task(Result), Snag)) {
   "gleam.toml"
   |> toml.parse_file
   |> result.lazy_unwrap(or: toml.new)
-  |> toml.decode(
-    get: ["rad", "tasks"],
-    expect: dynamic.list(of: toml.from_dynamic),
-  )
+  |> toml.decode(get: ["rad", "tasks"], // TODO: swap for gleam_stdlib > 0.22.1
+    //expect: dynamic.list(of: toml.from_dynamic),
+    expect: dynamic_list(of: toml.from_dynamic))
   |> result.unwrap(or: [])
   |> list.map(with: fn(toml) {
     try task =
@@ -709,4 +735,49 @@ pub fn tasks_from_config() -> List(gleam.Result(Task(Result), Snag)) {
     )
     |> Ok
   })
+}
+
+// TODO: remove for gleam_stdlib > 0.22.1
+fn dynamic_list(
+  of decoder_type: fn(dynamic.Dynamic) -> gleam.Result(a, dynamic.DecodeErrors),
+) -> dynamic.Decoder(List(a)) {
+  do_dynamic_list(decoder_type)
+}
+
+if erlang {
+  fn do_dynamic_list(decoder_type) {
+    dynamic.list(of: decoder_type)
+  }
+}
+
+if javascript {
+  fn do_dynamic_list(decoder_type) {
+    fn(dynamic) {
+      try list = decode_list(dynamic)
+      list
+      |> list.try_map(decoder_type)
+      |> result.map_error(with: list.map(_, with: push_path(_, "*")))
+    }
+  }
+
+  fn push_path(error, name) {
+    let name = dynamic.from(name)
+    let decoder =
+      dynamic.any([
+        dynamic.string,
+        fn(x) { result.map(dynamic.int(x), int.to_string) },
+      ])
+    let name = case decoder(name) {
+      Ok(name) -> name
+      Error(_) ->
+        ["<", dynamic.classify(name), ">"]
+        |> string.concat
+    }
+    dynamic.DecodeError(..error, path: [name, ..error.path])
+  }
+
+  external fn decode_list(
+    dynamic.Dynamic,
+  ) -> gleam.Result(List(dynamic.Dynamic), dynamic.DecodeErrors) =
+    "../rad_ffi.mjs" "tmp_decode_list"
 }
