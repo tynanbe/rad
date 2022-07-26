@@ -1,4 +1,8 @@
-//// TODO
+//// [TOML](https://toml.io/) is a markup language used by the `gleam` build
+//// tool and `rad` for configuration and recordkeeping.
+////
+//// Every Gleam project at a minimum has its own `gleam.toml` config, which
+//// both `gleam` and `rad` can read from and work with.
 ////
 
 import gleam/dynamic.{DecodeError, DecodeErrors, Decoder, Dynamic}
@@ -16,7 +20,9 @@ if erlang {
 ///
 pub external type Toml
 
-/// TODO
+/// Results in typed Gleam data decoded from the given [`Toml`](#Toml)'s
+/// `key_path` on success, or a [`Snag`](https://hexdocs.pm/snag/snag.html#Snag)
+/// on failure.
 ///
 pub fn decode(
   from toml: Toml,
@@ -52,7 +58,11 @@ if javascript {
     "../rad_ffi.mjs" "toml_get"
 }
 
-/// TODO
+/// Results in a list of every key-value pair for which the value can be
+/// successfully decoded from the given [`Toml`](#Toml)'s `key_path` using the
+/// given
+/// [`Decoder`](https://hexdocs.pm/gleam_stdlib/gleam/dynamic.html#Decoder), or
+/// a [`Snag`](https://hexdocs.pm/snag/snag.html#Snag) on failure.
 ///
 pub fn decode_every(
   from toml: Toml,
@@ -114,7 +124,10 @@ if javascript {
     "../rad_ffi.mjs" "toml_decode_every"
 }
 
-/// TODO
+/// Results in a [`Toml`](#Toml) decoded from the given dynamic `data` on
+/// success, or
+/// [`DecodeErrors`](https://hexdocs.pm/gleam_stdlib/gleam/dynamic.html#DecodeErrors)
+/// on failure.
 ///
 pub fn from_dynamic(data: Dynamic) -> Result(Toml, DecodeErrors) {
   decode_object(data)
@@ -130,7 +143,7 @@ if javascript {
     "../rad_ffi.mjs" "decode_object"
 }
 
-/// TODO
+/// Returns a new empty [`Toml`](#Toml).
 ///
 pub fn new() -> Toml {
   do_new()
@@ -146,7 +159,8 @@ if javascript {
     "" "globalThis.Object.prototype.constructor"
 }
 
-/// TODO
+/// Results in a [`Toml`](#Toml) parsed from the given file `path` on success,
+/// or a [`Snag`](https://hexdocs.pm/snag/snag.html#Snag) on failure.
 ///
 pub fn parse_file(path: String) -> Result(Toml, Snag) {
   path
