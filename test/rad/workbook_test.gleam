@@ -3,7 +3,7 @@ import gleam/map
 import gleam/option
 import gleam/string
 import gleeunit/should
-import rad/task
+import rad/task.{Parsed}
 import rad/workbook.{Workbook}
 import rad_test.{input, run, task}
 
@@ -90,7 +90,10 @@ fn workbook() -> Workbook {
   )
   |> workbook.task(
     add: ["chansey"]
-    |> task.new(run: fn(_info, task) { workbook.info(task) })
+    |> task.new(run: fn(_info, task) {
+      assert Parsed(config) = task.config
+      workbook.info(config)
+    })
     |> task.with_config,
   )
   |> workbook.task(

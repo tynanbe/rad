@@ -1,7 +1,3 @@
-//// TODO: Theme record
-//// TODO
-////
-
 import gleam/dynamic
 import gleam/function
 import gleam/list
@@ -14,7 +10,7 @@ import gleam/string
 import glint.{CommandInput}
 import glint/flag
 import rad/task.{Parsed, Result, Runner, Task, Tasks}
-import rad/toml
+import rad/toml.{Toml}
 import rad/util
 import shellout.{StyleFlags}
 import snag
@@ -31,7 +27,17 @@ const subcommand_color = "mint"
 
 const tab = "    "
 
-/// TODO
+/// A collection of tasks, each of which can be run from the `rad` command line
+/// interface.
+///
+/// A `Workbook` can be conveniently built up using the following functions:
+/// [`new`](#new), followed by any number of [`task`](#task), [`tasks`](#tasks),
+/// and [`delete`](#delete).
+///
+/// Any number of tasks can be added to a [`new`](#new) or existing `Workbook`,
+/// such as the standard [`workbook`](workbook/standard.html#workbook), to
+/// compose a custom `Workbook` that can be given to
+/// [`rad.do_main`](../rad.html#do_main).
 ///
 pub type Workbook =
   Map(List(String), Task(Result))
@@ -40,41 +46,46 @@ pub type Workbook =
 // Workbook Builder Functions             //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
-/// TODO
+/// Returns a new, empty [`Workbook`](#Workbook).
 ///
 pub fn new() -> Workbook {
   map.new()
 }
 
-/// TODO
+/// Converts a list of [`Tasks`](task.html#Tasks) into a
+/// [`Workbook`](#Workbook).
 ///
 pub fn from_tasks(list: Tasks) -> Workbook {
   new()
   |> tasks(add: list)
 }
 
-/// TODO
+/// Returns a new [`Workbook`](#Workbook) with the given
+/// [`Task`](task.html#Task) inserted.
 ///
 pub fn task(into workbook: Workbook, add task: Task(Result)) -> Workbook {
   workbook
   |> map.insert(for: task.path, insert: task)
 }
 
-/// TODO
+/// Returns a new [`Workbook`](#Workbook) with the given list of
+/// [`Tasks`](task.html#Tasks) inserted.
 ///
 pub fn tasks(into workbook: Workbook, add tasks: Tasks) -> Workbook {
   tasks
   |> list.fold(from: workbook, with: task)
 }
 
-/// TODO
+/// Returns a new [`Workbook`](#Workbook) with any [`Task`](task.html#Task) at
+/// the given `path` removed.
 ///
 pub fn delete(from workbook: Workbook, delete path: List(String)) -> Workbook {
   workbook
   |> map.delete(delete: path)
 }
 
-/// TODO
+/// Converts a [`Workbook`](#Workbook) into a list of
+/// [`Tasks`](task.html#Tasks).
 ///
 pub fn to_tasks(workbook: Workbook) -> Tasks {
   map.values(workbook)
@@ -90,9 +101,12 @@ pub fn to_tasks(workbook: Workbook) -> Tasks {
 /// [`Task`](task.html#Task) exists, is hidden from ancestor help dialogues, but can be
 /// viewed directly.
 ///
+/// Similarly, any [`flag`](task.html#flag) with an empty description will be
+/// hidden from all help dialogues.
+///
 pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
   fn(input: CommandInput, task: Task(Result)) {
-    let config = task.config
+    assert Parsed(config) = task.config
 
     let path = case task.path {
       ["help"] -> input.args
@@ -108,7 +122,6 @@ pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
       workbook
       |> map.get(path)
       |> result.replace_error(snag.new("rad task not found"))
-    let task = Task(..task, config: config)
 
     // Get subtasks
     let tasks =
@@ -145,7 +158,7 @@ pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
     let has_parameters = task.parameters != []
     let has_tasks = tasks != []
 
-    try info = info(task)
+    try info = info(config)
     let info = Some(info)
 
     let description = case task.shortdoc {
@@ -272,16 +285,16 @@ pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
   }
 }
 
-/// Gathers and formats information about `rad`.
+/// Results in formatted information about `rad` on success, or a
+/// [`Snag`](https://hexdocs.pm/snag/snag.html#Snag) on failure.
 ///
-pub fn info(task: Task(Result)) -> Result {
+pub fn info(config: Toml) -> Result {
   // Check if `rad` is the base project or a dependency
-  assert Parsed(toml) = task.config
   try project_name =
     ["name"]
-    |> toml.decode(from: toml, expect: dynamic.string)
-  try toml = case project_name {
-    "rad" -> Ok(toml)
+    |> toml.decode(from: config, expect: dynamic.string)
+  try config = case project_name {
+    "rad" -> Ok(config)
     _else ->
       "build/packages/rad/gleam.toml"
       |> toml.parse_file
@@ -298,7 +311,7 @@ pub fn info(task: Task(Result)) -> Result {
 
   let version =
     ["version"]
-    |> toml.decode(from: toml, expect: dynamic.string)
+    |> toml.decode(from: config, expect: dynamic.string)
     |> result.map(
       with: string.append(to: "v", suffix: _)
       |> function.compose(shellout.style(
@@ -311,7 +324,7 @@ pub fn info(task: Task(Result)) -> Result {
 
   let description =
     ["description"]
-    |> toml.decode(from: toml, expect: dynamic.string)
+    |> toml.decode(from: config, expect: dynamic.string)
     |> result.map(with: shellout.style(
       _,
       with: shellout.display(["italic"])
@@ -334,7 +347,7 @@ pub fn info(task: Task(Result)) -> Result {
   |> Ok
 }
 
-/// TODO
+/// Returns a stylized heading with the given `name`.
 ///
 pub fn heading(name: String) -> String {
   name
@@ -345,7 +358,16 @@ pub fn heading(name: String) -> String {
   )
 }
 
-/// TODO
+/// Returns [`Some`](https://hexdocs.pm/gleam_stdlib/gleam/option.html#Option)
+/// [`help`](#help) section, with a [`heading`](#heading) `name`, and `items`
+/// sorted and formatted into two columns, when the given `cond` is `True`,
+/// otherwise
+/// [`None`](https://hexdocs.pm/gleam_stdlib/gleam/option.html#Option).
+///
+/// The [`help`](#help) function uses `section` to enumerate and document a
+/// [`Task`](task.html#Task)'s additional usage
+/// [`parameters`](task.html#parameter), [`flags`](task.html#flag), and any
+/// subtasks of the [`Task`](task.html#Task) in question.
 ///
 pub fn section(
   named name: String,

@@ -143,7 +143,7 @@ if javascript {
     "../rad_ffi.mjs" "decode_object"
 }
 
-/// Returns a new empty [`Toml`](#Toml).
+/// Returns a new, empty [`Toml`](#Toml).
 ///
 pub fn new() -> Toml {
   do_new()
