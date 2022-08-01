@@ -25,10 +25,10 @@ if erlang {
 
 /// Runs `rad`, a flexible task runner companion for the `gleam` build manager.
 ///
-/// Specify a different workbook `module` in the `[rad]` table of your
-/// `gleam.toml` config to have `rad` run your workbook's `main` function, in
-/// which you can call [`do_main`](#do_main) to extend `rad` with your own
-/// [`Workbook`](rad/workbook.html#Workbook).
+/// Specify a different `workbook` module in the `[rad]` table of your project's
+/// `gleam.toml` configuration file to have `rad` run your workbook's `main`
+/// function, in which you can call [`do_main`](#do_main) to extend `rad` with
+/// your own [`Workbook`](rad/workbook.html#Workbook).
 ///
 pub fn main() -> Nil {
   let toml =
@@ -61,7 +61,7 @@ pub fn main() -> Nil {
   rad_run(
     with,
     fn() {
-      ["rad", "module"]
+      ["rad", "workbook"]
       |> toml.decode(from: toml, expect: dynamic.string)
       |> result.unwrap(or: "rad/workbook/standard")
       |> gleam_run

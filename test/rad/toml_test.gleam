@@ -71,7 +71,7 @@ pub fn decode_test() {
     "gleam.toml"
     |> toml.parse_file
 
-  ["rad", "module"]
+  ["rad", "workbook"]
   |> toml.decode(from: toml, expect: dynamic.string)
   |> should.equal(Ok("rad/workbook/standard"))
 
@@ -81,11 +81,11 @@ pub fn decode_test() {
   |> toml.decode(from: toml, expect: dynamic_list(of: dynamic.string))
   |> should.equal(Ok(["erlang", "javascript"]))
 
-  ["rad", "module"]
+  ["rad", "workbook"]
   |> toml.decode(from: toml, expect: dynamic.dynamic)
   |> should.be_ok
 
-  ["rad", "module"]
+  ["rad", "workbook"]
   |> toml.decode(from: toml, expect: dynamic.int)
   |> should.be_error
 

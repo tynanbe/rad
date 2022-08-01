@@ -1,5 +1,20 @@
-//// TODO: colour
-//// TODO
+//// The standard `rad` workbook module exemplifies how to create a custom
+//// `workbook.gleam` module for your own project.
+////
+//// By providing [`main`](#main) and [`workbook`](#workbook) functions in your
+//// project's `workbook.gleam` file, you can extend `rad`'s standard
+//// [`workbook`](#workbook) with your own or write one entirely from scratch,
+//// optionally making it and your [`Runner`](../task.html#Runner)s available
+//// for any dependent projects!
+////
+//// All [`Runner`](../task.html#Runner) functions return the
+//// [`task.Result`](../task.html#Result) type, which is a `String` on success
+//// or a [`Snag`](https://hexdocs.pm/snag/snag.html#Snag) on failure. As such,
+//// this documentation describes the side effects of the standard
+//// [`workbook`](#workbook)'s runners, whether they occur in another
+//// [`Runner`](../task.html#Runner) or [`rad.do_main`](../../rad.html#do_main)
+//// (either of which might print a non-empty [`Result`](../task.html#Result)),
+//// or directly.
 ////
 
 import gleam
@@ -36,18 +51,35 @@ if javascript {
   import gleam/json
 }
 
-/// TODO
+/// Directories that are omitted when printing, watching, etc.
 ///
 pub const ignore_glob = ".git|_build|build|deps|node_modules"
 
-/// TODO
+/// Runs [`rad.do_main`](../../rad.html#do_main) with `rad`'s standard
+/// [`workbook`](#workbook).
+///
+/// You can use your project's `gleam.toml` config to have `rad` run your own
+/// `workbook.gleam` module's `main` function. Similar to importing a Gleam
+/// module, the path is relative to the module's `src` directory and should omit
+/// the `.gleam` extension.
+///
+/// ## Examples
+///
+/// ```toml
+/// [rad]
+/// workbook = "my/workbook"
+/// ```
+///
+/// Note that `rad`'s standard workbook module is run by default, with no config
+/// necessary.
 ///
 pub fn main() -> Nil {
   workbook()
   |> rad.do_main
 }
 
-/// TODO
+/// Returns `rad`'s standard [`Workbook`](../workbook.html#Workbook), which can
+/// be used as a base when building your own.
 ///
 pub fn workbook() -> Workbook {
   let style_flags = [
@@ -84,7 +116,7 @@ pub fn workbook() -> Workbook {
       |> result.map(with: fn(target) { [target] })
     })
     |> result.unwrap(or: ["erlang"])
-    |> flag.strings(called: "target", explained: "The platform(s) to target"),
+    |> flag.strings(called: "target", explained: "The platforms to target"),
   ]
 
   let package_flags = [
@@ -124,14 +156,14 @@ pub fn workbook() -> Workbook {
   |> task(
     add: ["add"]
     |> new(run: gleam(["add"]))
-    |> shortdoc("Add a new project dependency")
+    |> shortdoc("Add new project dependencies")
     |> flag(
       called: "dev",
-      explained: "Add the package(s) as dev-only dependencies",
+      explained: "Add the packages as dev-only dependencies",
       expect: flag.bool,
       default: False,
     )
-    |> parameter(with: "..<packages>", of: "Name(s) of Hex package(s)"),
+    |> parameter(with: "..<packages>", of: "Names of Hex packages"),
   )
   |> task(
     add: ["build"]
@@ -160,7 +192,7 @@ pub fn workbook() -> Workbook {
     add: ["config"]
     |> new(run: config)
     |> shortdoc("Print project config values")
-    |> parameter(with: "<path>", of: "TOML breadcrumb(s), space-separated")
+    |> parameter(with: "<path>", of: "TOML breadcrumbs, space-separated")
     |> with_config,
   )
   |> task(
@@ -177,7 +209,7 @@ pub fn workbook() -> Workbook {
   |> task(
     add: ["deps", "update"]
     |> new(run: gleam(["deps", "update"]))
-    |> shortdoc("Update dependency packages to their latest versions"),
+    |> shortdoc("Update dependency packages"),
   )
   |> task(
     add: ["docs"]
@@ -196,7 +228,7 @@ pub fn workbook() -> Workbook {
     |> flags(add: package_flags)
     |> parameter(
       with: "..[packages]",
-      of: "Package name(s) (default: current project)",
+      of: "Package names (default: current project)",
     )
     |> with_config,
   )
@@ -225,7 +257,7 @@ pub fn workbook() -> Workbook {
     |> flags(add: package_flags)
     |> parameter(
       with: "..[packages]",
-      of: "Package name(s) to build docs for (default: current project)",
+      of: "Package names to build docs for (default: current project)",
     )
     |> with_config,
   )
@@ -256,7 +288,7 @@ pub fn workbook() -> Workbook {
     |> shortdoc("Print help information")
     |> parameter(
       with: "[subcommand]",
-      of: "Subcommand breadcrumb(s), space-separated",
+      of: "Subcommand breadcrumbs, space-separated",
     )
     |> with_config,
   )
@@ -267,12 +299,12 @@ pub fn workbook() -> Workbook {
       each: packages
       |> or(cond: "all", else: arguments),
     )
-    |> shortdoc("Print a package name")
+    |> shortdoc("Print package names")
     |> flags(add: package_flags)
     |> flags(add: style_flags)
     |> parameter(
       with: "..[packages]",
-      of: "Package name(s) (default: current project)",
+      of: "Package names (default: current project)",
     )
     |> with_config,
   )
@@ -286,7 +318,7 @@ pub fn workbook() -> Workbook {
     |> new(run: ping)
     |> for(each: arguments)
     |> shortdoc("Fetch HTTP status codes")
-    |> parameter(with: "..<uris>", of: "Request location(s)"),
+    |> parameter(with: "..<uris>", of: "Request locations"),
   )
   |> task(
     add: ["shell"]
@@ -317,18 +349,18 @@ pub fn workbook() -> Workbook {
       each: packages
       |> or(cond: "all", else: arguments),
     )
-    |> shortdoc("Print a package version")
+    |> shortdoc("Print package versions")
     |> flags(add: package_flags)
     |> flag(
       called: "bare",
-      explained: "Omit the package name(s)",
+      explained: "Omit package names",
       expect: flag.bool,
       default: False,
     )
     |> flags(add: style_flags)
     |> parameter(
       with: "..[packages]",
-      of: "Package name(s) (default: current project)",
+      of: "Package names (default: current project)",
     )
     |> with_config
     |> with_manifest,
@@ -336,7 +368,7 @@ pub fn workbook() -> Workbook {
   |> task(
     add: ["watch"]
     |> new(run: watch)
-    |> shortdoc("Automate some project tasks")
+    |> shortdoc("Automate project tasks")
     |> flags(add: watch_flags),
   )
   |> task(
@@ -346,7 +378,8 @@ pub fn workbook() -> Workbook {
   )
 }
 
-/// TODO
+/// Prints [`help`](../workbook.html#help) information, or `rad`'s version when
+/// given the `--version` flag.
 ///
 pub fn root(input: CommandInput, task: Task(Result)) -> Result {
   assert Ok(flag.B(ver)) =
@@ -372,7 +405,10 @@ pub fn root(input: CommandInput, task: Task(Result)) -> Result {
   }
 }
 
-/// TODO
+/// Prints project configuration values from `gleam.toml` as stringified JSON.
+///
+/// Input arguments are taken to be a breadcrumb trail of TOML keys, and a
+/// subset of the configuration is printed upon successful traversal.
 ///
 pub fn config(input: CommandInput, task: Task(Result)) -> Result {
   assert Parsed(config) = task.config
@@ -381,7 +417,10 @@ pub fn config(input: CommandInput, task: Task(Result)) -> Result {
   |> result.map(with: util.encode_json)
 }
 
-/// TODO
+/// Renders HTML documentation for local Gleam packages.
+///
+/// Any number of packages, or `--all`, can be given as input arguments; if none
+/// are given, the current project's documentation is rendered.
 ///
 pub fn docs_build(input: CommandInput, task: Task(Result)) -> Result {
   assert Ok(flag.B(all)) =
@@ -475,7 +514,17 @@ pub fn docs_build(input: CommandInput, task: Task(Result)) -> Result {
   }
 }
 
-/// TODO
+/// Serves HTML documentation for local Gleam packages.
+///
+/// Any number of packages, or `--all`, can be given as input arguments to
+/// render before serving; if none are given, the current project's
+/// documentation is rendered.
+///
+/// The `build/dev/docs/` directory is by default served at
+/// [http://localhost:7000/](http://localhost:7000/) with support for live
+/// reloading. Host, port, and live reloading support can all be altered via
+/// input flags. For example, setting `--host=0.0.0.0` allows the server to
+/// respond to external requests.
 ///
 pub fn docs_serve(input: CommandInput, task: Task(Result)) -> Result {
   try _output = docs_build(input, task)
@@ -505,13 +554,27 @@ pub fn docs_serve(input: CommandInput, task: Task(Result)) -> Result {
   |> result.replace("")
 }
 
-/// TODO
+/// Formats your project's source code, or verifies that it has already been
+/// formatted when given the `--check` flag.
 ///
-pub type Formatter {
-  Formatter(name: String, check: List(String), run: List(String))
-}
-
-/// TODO
+/// Gleam code in the `src` and `test` directories, and any of their
+/// subdirectories, is formatted by default.
+///
+/// Additional [`Formatter`](../task.html#Formatter)s can be defined in your
+/// project's `gleam.toml` configuration file.
+///
+/// ## Examples
+///
+/// ```toml
+/// [[rad.formatters]]
+/// name = "javascript"
+/// check = ["rome", "ci", "--indent-style=space", "src", "test"]
+/// run = ["rome", "format", "--indent-style=space", "--write", "src", "test"]
+/// ```
+///
+/// All valid [`Formatter`](../task.html#Formatter)s are run or checked in
+/// sequence regardless of any errors along the way, but they must all be valid
+/// and successful for this [`Runner`](../task.html#Runner) to succeed.
 ///
 pub fn format(input: CommandInput, task: Task(Result)) -> Result {
   assert Ok(flag.B(fail)) =
@@ -554,7 +617,17 @@ pub fn format(input: CommandInput, task: Task(Result)) -> Result {
   }
 }
 
-/// TODO
+/// Prints stylized names for packages found in your project's `gleam.toml`
+/// configuration file.
+///
+/// Any number of packages, or `--all`, can be given as input arguments; if none
+/// are given, the current project's name is printed.
+///
+/// The style can be set with the `--display`, `--color`, and `--background`
+/// flags, which are passed to
+/// [`shellout.style`](https://hexdocs.pm/shellout/shellout.html#style).
+///
+/// Can be useful as a building block in other [`Runner`](../task.html#Runner)s.
 ///
 pub fn name(input: CommandInput, task: Task(Result)) -> Result {
   try #(name, _is_self) =
@@ -591,7 +664,9 @@ fn style_flags(flags: flag.Map) -> StyleFlags {
   })
 }
 
-/// TODO
+/// Prints the repository URL for the `git` remote named origin.
+///
+/// Requires the `git` command to be available on the system.
 ///
 pub fn origin(_input: CommandInput, _task: Task(Result)) -> Result {
   ["remote", "get-url", "origin"]
@@ -599,7 +674,11 @@ pub fn origin(_input: CommandInput, _task: Task(Result)) -> Result {
   |> result.replace_error(snag.new("git remote `origin` not found"))
 }
 
-/// TODO
+/// Fetches the HTTP status codes for the given URIs.
+///
+/// All URIs are checked in sequence regardless of any errors along the way, but
+/// all status codes must be successful for this [`Runner`](../task.html#Runner)
+/// to succeed.
 ///
 pub fn ping(input: CommandInput, _task: Task(Result)) -> Result {
   try uri_string = case input.args {
@@ -690,7 +769,38 @@ if javascript {
   }
 }
 
-/// TODO
+/// Launches an interactive shell, or REPL, with all of your project's modules
+/// and dependencies preloaded and available.
+///
+/// The input argument specifies the type of shell to run, defaulting to `erl`,
+/// the Erlang shell, if none is given. Valid shells include `deno`, `erl` (or
+/// `erlang`), `iex` (or `elixir`), and `node` (or `nodejs`).
+///
+/// The syntax for accessing modules depends on the chosen shell.
+///
+/// ## Erlang
+///
+/// ```erlang
+/// 1> gleam@io:println("Hi from Erlang").
+/// Hi from Erlang
+/// nil
+/// ```
+///
+/// ## Elixir
+///
+/// ```elixir
+/// iex(1)> :gleam@io.println("Hi from Elixir")
+/// Hi from Elixir
+/// nil
+/// ```
+///
+/// ## JavaScript
+///
+/// ```javascript
+/// > $gleam$io.println("Hi from JavaScript")
+/// Hi from JavaScript
+/// undefined
+/// ```
 ///
 pub fn shell(input: CommandInput, task: Task(Result)) -> Result {
   do_shell(input, task)
@@ -760,7 +870,15 @@ if javascript {
   }
 }
 
-/// TODO
+/// Prints your project's file structure using a tree representation.
+///
+/// Some paths, such as `.git` and `build` (see [`ignore_glob`](#ignore_glob)),
+/// are ignored.
+///
+/// Requires the `exa` or `tree` command to be available on the system (in order
+/// of preference).
+///
+/// When running `exa`, a `git` status summary is shown for each file.
 ///
 pub fn tree(_input: CommandInput, _task: Task(Result)) -> Result {
   assert Ok(working_directory) = util.working_directory()
@@ -803,7 +921,17 @@ pub fn tree(_input: CommandInput, _task: Task(Result)) -> Result {
   ))
 }
 
-/// TODO
+/// Prints stylized versions for packages found in your project's `gleam.toml`
+/// configuration file.
+///
+/// Any number of packages, or `--all`, can be given as input arguments; if none
+/// are given, the current project's version is printed.
+///
+/// If the `--bare` flag is given, only the version strings are printed.
+///
+/// The style can be set with the `--display`, `--color`, and `--background`
+/// flags, which are passed to
+/// [`shellout.style`](https://hexdocs.pm/shellout/shellout.html#style).
 ///
 pub fn version(input: CommandInput, task: Task(Result)) -> Result {
   assert Ok(flag.B(bare)) =
@@ -868,7 +996,29 @@ pub fn version(input: CommandInput, task: Task(Result)) -> Result {
   |> Ok
 }
 
-/// TODO
+/// Watches your project's files and runs commands when they change.
+///
+/// Some paths, such as `.git` and `build` (see [`ignore_glob`](#ignore_glob)),
+/// are ignored.
+///
+/// Requires the `watchexec` or `inotifywait` command to be available on the
+/// system (in order of preference).
+///
+/// Input arguments are taken to be a command to run when changes are detected.
+/// If no arguments are given, the command defaults to
+/// [`rad watch do`](#watch_do).
+///
+/// Note that `rad` makes few assumptions about the local environment and will
+/// not run commands through any shell interpreter on its own. As such, one
+/// method of running multiple commands is to wrap them in a single command that
+/// invokes the shell interpreter of your choice.
+///
+/// ## Examples
+///
+/// ```shell
+/// > rad watch sh -c \
+///   'n() shuf -i99-156 -n1; clear; rad version --color=$(n),$(n),$(n)'
+/// ```
 ///
 pub fn watch(input: CommandInput, task: Task(Result)) -> Result {
   do_watch(input, task)
@@ -883,8 +1033,15 @@ if erlang {
 if javascript {
   fn do_watch(input: CommandInput, _task: Task(Result)) -> Result {
     let options = [LetBeStderr, LetBeStdout]
-    let rad = util.which_rad()
-    let flags = util.relay_flags(input.flags)
+    let [command, ..args] as watch_do = case input.args {
+      [] -> {
+        let rad = util.which_rad()
+        let flags = util.relay_flags(input.flags)
+        [rad, "watch", "do", ..flags]
+      }
+      args -> args
+    }
+
     [
       " Watching"
       |> shellout.style(with: shellout.color(["magenta"]), custom: util.lookups),
@@ -903,9 +1060,10 @@ if javascript {
           ["--ignore=**/", directory, "/**"]
           |> string.concat
         }),
+        ["--no-shell"],
         ["--postpone"],
         ["--watch-when-idle"],
-        ["--", rad, "watch", "do", ..flags],
+        ["--", ..watch_do],
       ]
       |> list.flatten
       |> shellout.command(run: "watchexec", in: ".", opt: options)
@@ -933,8 +1091,8 @@ if javascript {
             |> shellout.command(run: "inotifywait", in: ".", opt: options)
           },
           do: fn() {
-            ["watch", "do", ..flags]
-            |> shellout.command(run: rad, in: ".", opt: options)
+            command
+            |> shellout.command(with: args, in: ".", opt: options)
           },
         )
         |> result.replace_error(snag.layer(
@@ -955,7 +1113,24 @@ if javascript {
     "../../rad_ffi.mjs" "watch_loop"
 }
 
-/// TODO
+/// Runs several `rad` tasks in succession: renders the project's HTML
+/// documentation, signals the documentation server to do a live reload for all
+/// known client connections, and runs the project's tests for all specified
+/// targets.
+///
+/// Accepts the `--no-docs`, `--port`, and `--target` input flags.
+///
+/// This is the default action when running [`rad watch`](#watch).
+///
+/// Note that default targets can also be specified in your project's
+/// `gleam.toml` configuration file.
+///
+/// ## Examples
+///
+/// ```toml
+/// [rad]
+/// targets = ["erlang", "javascript"]
+/// ```
 ///
 pub fn watch_do(input: CommandInput, _task: Task(Result)) -> Result {
   assert Ok(flag.B(no_docs)) =

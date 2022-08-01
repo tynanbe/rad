@@ -265,9 +265,8 @@ pub fn with_manifest(task: Task(a)) -> Task(a) {
 /// Returns a function that generates a given [`Iterable`](#Iterable) when the
 /// [`Runner`](#Runner)'s
 /// [`CommandInput`](https://hexdocs.pm/glint/glint.html#CommandInput) contains
-/// a boolean input [`Flag`](https://hexdocs.pm/glint/glint/flag.html#Flag)
-/// called `flag_name` with a `True` value, or another [`Iterable`](#Iterable)
-/// otherwise.
+/// a boolean input [`flag`](#flag) called `flag_name` with a `True` value, or
+/// another [`Iterable`](#Iterable) otherwise.
 ///
 /// An [`Iterable`](#Iterable) can be attached to a given [`Task`](#Task) using
 /// the [`for`](#for) builder function.
