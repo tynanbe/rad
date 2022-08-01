@@ -63,6 +63,9 @@ pub fn from_tasks(list: Tasks) -> Workbook {
 /// Returns a new [`Workbook`](#Workbook) with the given
 /// [`Task`](task.html#Task) inserted.
 ///
+/// Note that if a [`Task`](task.html#Task) is added with an existing path, it
+/// will replace the [`Task`](task.html#Task) that was already there.
+///
 pub fn task(into workbook: Workbook, add task: Task(Result)) -> Workbook {
   workbook
   |> map.insert(for: task.path, insert: task)
@@ -70,6 +73,9 @@ pub fn task(into workbook: Workbook, add task: Task(Result)) -> Workbook {
 
 /// Returns a new [`Workbook`](#Workbook) with the given list of
 /// [`Tasks`](task.html#Tasks) inserted.
+///
+/// Note that if a [`Task`](task.html#Task) is added with an existing path, it
+/// will replace the [`Task`](task.html#Task) that was already there.
 ///
 pub fn tasks(into workbook: Workbook, add tasks: Tasks) -> Workbook {
   tasks

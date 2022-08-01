@@ -61,7 +61,7 @@ pub fn main() -> Nil {
   rad_run(
     with,
     fn() {
-      ["rad", "module"]
+      ["rad", "workbook"]
       |> toml.decode(from: toml, expect: dynamic.string)
       |> result.unwrap(or: "rad/workbook/standard")
       |> gleam_run
