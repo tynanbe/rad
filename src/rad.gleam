@@ -1,6 +1,3 @@
-//// TODO
-////
-
 import gleam/bool
 import gleam/dynamic
 import gleam/function
@@ -19,7 +16,6 @@ import shellout.{LetBeStderr, LetBeStdout}
 import snag.{Snag}
 
 if erlang {
-  import gleam/dynamic.{Dynamic}
   import gleam/erlang/atom.{Atom}
 }
 
@@ -31,7 +27,7 @@ if erlang {
 /// your own [`Workbook`](rad/workbook.html#Workbook).
 ///
 pub fn main() -> Nil {
-  let toml =
+  let config =
     "gleam.toml"
     |> toml.parse_file
     |> result.lazy_unwrap(or: toml.new)
@@ -39,7 +35,7 @@ pub fn main() -> Nil {
   // Determine runtime
   let with =
     ["rad", "with"]
-    |> toml.decode(from: toml, expect: dynamic.string)
+    |> toml.decode(from: config, expect: dynamic.string)
     |> result.unwrap(or: "javascript")
   assert Ok(Out(with)) =
     glint.new()
@@ -62,7 +58,7 @@ pub fn main() -> Nil {
     with,
     fn() {
       ["rad", "workbook"]
-      |> toml.decode(from: toml, expect: dynamic.string)
+      |> toml.decode(from: config, expect: dynamic.string)
       |> result.unwrap(or: "rad/workbook/standard")
       |> gleam_run
     },
@@ -192,7 +188,7 @@ if erlang {
     Nil
   }
 
-  external fn erlang_gleam_run(Atom) -> Dynamic =
+  external fn erlang_gleam_run(Atom) -> dynamic.Dynamic =
     "gleam@@main" "run"
 }
 

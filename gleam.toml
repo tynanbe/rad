@@ -14,15 +14,15 @@ href = "https://gleam.run/"
 title = "Website"
 
 [dependencies]
-gleam_erlang = "~> 0.9"
-gleam_http = "~> 3.0"
+gleam_erlang = "~> 0.15"
+gleam_http = "~> 3.1"
 gleam_httpc = "~> 2.0"
 gleam_json = "~> 0.5"
-gleam_stdlib = "~> 0.22"
+gleam_stdlib = "~> 0.22.3"
 glint = "~> 0.8"
 shellout = "~> 1.0"
 snag = "~> 0.2"
-thoas = "~> 0.2"
+thoas = "~> 0.3"
 tomerl = "~> 0.5"
 
 [dev-dependencies]

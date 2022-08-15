@@ -1,12 +1,5 @@
-// TODO: swap for gleam_stdlib > 0.22.1
-//import { Error, Ok, toList } from "./gleam.mjs";
-import { Error, List, Ok, toList } from "./gleam.mjs";
-// TODO: swap for gleam_stdlib > 0.22.1
-//import { classify_dynamic } from "../../gleam_stdlib/dist/gleam_stdlib.mjs";
-import {
-  classify_dynamic,
-  decode_list,
-} from "../../gleam_stdlib/dist/gleam_stdlib.mjs";
+import { Error, Ok, toList } from "./gleam.mjs";
+import { classify_dynamic } from "../../gleam_stdlib/dist/gleam_stdlib.mjs";
 import { DecodeError } from "../../gleam_stdlib/dist/gleam/dynamic.mjs";
 import * as TOML from "../priv/node_modules/@ltd/j-toml/index.mjs";
 import * as fs from "fs";
@@ -21,10 +14,9 @@ const Nil = undefined;
 const prefix = "./build/dev/javascript";
 
 export function gleam_run(module) {
-  let module_re = new RegExp("(^([.]*/)+|(/[.]*)+$|(/[.]+/)+)", "g");
-  module = module.replace(module_re, "");
-  let dir = module.replace(new RegExp("/.*$"), "");
-  import(path.join("../..", dir, "dist", `${module}.mjs`)).then(
+  let config = toml_read_file("./gleam.toml")[0];
+  let project = toml_get(config, ["name"])[0];
+  import(path.join("../..", project, "dist", `${module}.mjs`)).then(
     (module) => module.main(),
   );
   return Nil;
@@ -38,12 +30,17 @@ export function ebin_paths() {
         fs
           .readdirSync(prefix, { withFileTypes: true })
           .filter((item) => item.isDirectory())
-          .map((subdir) => [prefix, subdir.name, "ebin"].join("/")),
+          .map((subdir) => path_join(prefix, subdir.name, "ebin")),
       ),
     );
   } catch {
     return new Error(Nil);
   }
+}
+
+function path_join(...paths) {
+  let pathname = path.join(...paths);
+  return path.isAbsolute(pathname) ? pathname : `.${path.sep}${pathname}`;
 }
 
 export function load_modules() {
@@ -69,11 +66,11 @@ export function load_modules() {
 }
 
 export function mjs_paths() {
-  let dist = (dirent) => [prefix, dirent.name, "dist"].join("/");
+  let dist = (dirent) => path_join(prefix, dirent.name, "dist");
   try {
     return new Ok(
       toList([
-        `${dist({ name: "gleam_stdlib" })}/gleam.mjs`,
+        path_join(dist({ name: "gleam_stdlib" }), "gleam.mjs"),
         ...fs
           .readdirSync(prefix, { withFileTypes: true })
           .filter((item) => is_directory(dist(item)))
@@ -92,8 +89,8 @@ function do_mjs_paths(prefix) {
       .readdirSync(prefix, { withFileTypes: true })
       .filter((item) => "gleam.mjs" !== item.name)
       .map((item) => {
-        let path = `${prefix}/${item.name}`;
-        return item.isDirectory() ? do_mjs_paths(path) : path;
+        let pathname = path_join(prefix, item.name);
+        return item.isDirectory() ? do_mjs_paths(pathname) : pathname;
       })
       .flat()
       .filter((item) => item.endsWith(".mjs"))
@@ -120,14 +117,6 @@ export function watch_loop(watch_fun, do_fun) {
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 // TOML Functions                         //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
-
-// TODO: remove for gleam_stdlib > 0.22.1
-export function tmp_decode_list(data) {
-  if (Array.isArray(data)) {
-    return new Ok(List.fromArray(data));
-  }
-  return decode_list(data);
-}
 
 export function decode_object(data) {
   if (typeof data === "object" && !Array.isArray(data) && null !== data) {

@@ -1,4 +1,6 @@
-#!/usr/bin/env -S sh -e
+#!/usr/bin/env sh
+
+set -e
 
 self="rad"
 module="./build/dev/javascript/${self}/dist/${self}.mjs"

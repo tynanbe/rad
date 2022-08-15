@@ -32,13 +32,10 @@ import gleam/uri.{Uri}
 import glint.{CommandInput}
 import glint/flag
 import rad
-import rad/task.{
-  Parsed, Result, Task, arguments, delimit, flag, flags, for, formatters, gleam,
-  new, or, packages, parameter, shortdoc, targets, with_config, with_manifest,
-}
+import rad/task.{Parsed, Result, Task}
 import rad/toml.{Toml}
 import rad/util
-import rad/workbook.{Workbook, help, task}
+import rad/workbook.{Workbook}
 import shellout.{LetBeStderr, LetBeStdout, StyleFlags}
 import snag.{Snag}
 
@@ -107,9 +104,7 @@ pub fn workbook() -> Workbook {
 
   let target_flags = [
     ["rad", "targets"]
-    // TODO: swap for gleam_stdlib > 0.22.1
-    //|> toml.decode(from: toml, expect: dynamic.list(of: dynamic.string))
-    |> toml.decode(from: toml, expect: dynamic_list(of: dynamic.string))
+    |> toml.decode(from: toml, expect: dynamic.list(of: dynamic.string))
     |> result.lazy_or(fn() {
       ["target"]
       |> toml.decode(from: toml, expect: dynamic.string)
@@ -142,239 +137,244 @@ pub fn workbook() -> Workbook {
   ]
 
   workbook.new()
-  |> task(
+  |> workbook.task(
     add: []
-    |> new(run: root)
-    |> flag(
+    |> task.new(run: root)
+    |> task.flag(
       called: "version",
       explained: "Print rad's version",
       expect: flag.bool,
       default: False,
     )
-    |> with_config,
+    |> task.with_config,
   )
-  |> task(
+  |> workbook.task(
     add: ["add"]
-    |> new(run: gleam(["add"]))
-    |> shortdoc("Add new project dependencies")
-    |> flag(
+    |> task.new(run: task.gleam(["add"]))
+    |> task.shortdoc("Add new project dependencies")
+    |> task.flag(
       called: "dev",
       explained: "Add the packages as dev-only dependencies",
       expect: flag.bool,
       default: False,
     )
-    |> parameter(with: "..<packages>", of: "Names of Hex packages"),
+    |> task.parameter(with: "..<packages>", of: "Names of Hex packages"),
   )
-  |> task(
+  |> workbook.task(
     add: ["build"]
-    |> new(run: gleam(["build"]))
-    |> for(each: targets)
-    |> shortdoc("Build the project")
-    |> flag(
+    |> task.new(run: task.gleam(["build"]))
+    |> task.for(each: task.targets)
+    |> task.shortdoc("Build the project")
+    |> task.flag(
       called: "warnings-as-errors",
       explained: "Emit compile time warnings as errors",
       expect: flag.bool,
       default: False,
     )
-    |> flags(add: target_flags),
+    |> task.flags(add: target_flags),
   )
-  |> task(
+  |> workbook.task(
     add: ["check"]
-    |> new(run: gleam(["check"]))
-    |> shortdoc("Type check the project"),
+    |> task.new(run: task.gleam(["check"]))
+    |> task.shortdoc("Type check the project"),
   )
-  |> task(
+  |> workbook.task(
     add: ["clean"]
-    |> new(run: gleam(["clean"]))
-    |> shortdoc("Clean build artifacts"),
+    |> task.new(run: task.gleam(["clean"]))
+    |> task.shortdoc("Clean build artifacts"),
   )
-  |> task(
+  |> workbook.task(
     add: ["config"]
-    |> new(run: config)
-    |> shortdoc("Print project config values")
-    |> parameter(with: "<path>", of: "TOML breadcrumbs, space-separated")
-    |> with_config,
+    |> task.new(run: config)
+    |> task.shortdoc("Print project config values")
+    |> task.parameter(with: "<path>", of: "TOML breadcrumbs, space-separated")
+    |> task.with_config,
   )
-  |> task(
+  |> workbook.task(
     add: ["deps"]
-    |> new(run: help(from: workbook))
-    |> shortdoc("Work with dependency packages")
-    |> with_config,
+    |> task.new(run: workbook.help(from: workbook))
+    |> task.shortdoc("Work with dependency packages")
+    |> task.with_config,
   )
-  |> task(
+  |> workbook.task(
     add: ["deps", "list"]
-    |> new(run: gleam(["deps", "list"]))
-    |> shortdoc("List dependency packages"),
+    |> task.new(run: task.gleam(["deps", "list"]))
+    |> task.shortdoc("List dependency packages"),
   )
-  |> task(
+  |> workbook.task(
     add: ["deps", "update"]
-    |> new(run: gleam(["deps", "update"]))
-    |> shortdoc("Update dependency packages"),
+    |> task.new(run: task.gleam(["deps", "update"]))
+    |> task.shortdoc("Update dependency packages"),
   )
-  |> task(
+  |> workbook.task(
     add: ["docs"]
-    |> new(run: help(from: workbook))
-    |> shortdoc("Work with HTML documentation")
-    |> with_config,
+    |> task.new(run: workbook.help(from: workbook))
+    |> task.shortdoc("Work with HTML documentation")
+    |> task.with_config,
   )
-  |> task(
+  |> workbook.task(
     add: ["docs", "build"]
-    |> new(run: docs_build)
-    |> for(
-      each: packages
-      |> or(cond: "all", else: arguments),
+    |> task.new(run: docs_build)
+    |> task.for(
+      each: task.packages
+      |> task.or(cond: "all", else: task.arguments),
     )
-    |> shortdoc("Render HTML documentation")
-    |> flags(add: package_flags)
-    |> parameter(
+    |> task.shortdoc("Render HTML documentation")
+    |> task.flags(add: package_flags)
+    |> task.parameter(
       with: "..[packages]",
       of: "Package names (default: current project)",
     )
-    |> with_config,
+    |> task.with_config,
   )
-  |> task(
+  |> workbook.task(
     add: ["docs", "serve"]
-    |> new(run: docs_serve)
-    |> shortdoc("Serve HTML documentation")
-    |> flag(
+    |> task.new(run: docs_serve)
+    |> task.shortdoc("Serve HTML documentation")
+    |> task.flag(
       called: "host",
       explained: "Bind to host (default localhost)",
       expect: flag.string,
       default: "localhost",
     )
-    |> flag(
+    |> task.flag(
       called: "no-live",
       explained: "Disable live reloading",
       expect: flag.bool,
       default: False,
     )
-    |> flag(
+    |> task.flag(
       called: "port",
       explained: "Listen on port (default 7000)",
       expect: flag.int,
       default: 7000,
     )
-    |> flags(add: package_flags)
-    |> parameter(
+    |> task.flags(add: package_flags)
+    |> task.parameter(
       with: "..[packages]",
       of: "Package names to build docs for (default: current project)",
     )
-    |> with_config,
+    |> task.with_config,
   )
-  |> task(
+  |> workbook.task(
     add: ["format"]
-    |> new(run: format)
-    |> for(each: formatters)
-    |> delimit(with: "\n\n")
-    |> shortdoc("Format source code")
-    |> flag(
+    |> task.new(run: format)
+    |> task.for(each: task.formatters)
+    |> task.delimit(with: "\n\n")
+    |> task.shortdoc("Format source code")
+    |> task.flag(
       called: "check",
       explained: "Check if inputs are formatted without changing them",
       expect: flag.bool,
       default: False,
     )
-    |> flag(called: "fail", explained: "", expect: flag.bool, default: False),
+    |> task.flag(
+      called: "fail",
+      explained: "",
+      expect: flag.bool,
+      default: False,
+    ),
   )
-  //|> parameter(with: "..[files]", of: "Files to format (default: .)"),
-  |> task(
+  // TODO: |> task.parameter(with: "..[files]", of: "Files to format (default: .)"),
+  |> workbook.task(
     add: ["Hello,", "Lucy!"]
-    |> new(run: hello_lucy)
-    |> flags(add: list.drop(from: style_flags, up_to: 1))
-    |> shortdoc("Greet Gleam's mascot ✨"),
+    |> task.new(run: hello_lucy)
+    |> task.flags(add: list.drop(from: style_flags, up_to: 1))
+    |> task.shortdoc("Greet Gleam's mascot ✨"),
   )
-  |> task(
+  |> workbook.task(
     add: ["help"]
-    |> new(run: help(from: workbook))
-    |> shortdoc("Print help information")
-    |> parameter(
+    |> task.new(run: workbook.help(from: workbook))
+    |> task.shortdoc("Print help information")
+    |> task.parameter(
       with: "[subcommand]",
       of: "Subcommand breadcrumbs, space-separated",
     )
-    |> with_config,
+    |> task.with_config,
   )
-  |> task(
+  |> workbook.task(
     add: ["name"]
-    |> new(run: name)
-    |> for(
-      each: packages
-      |> or(cond: "all", else: arguments),
+    |> task.new(run: name)
+    |> task.for(
+      each: task.packages
+      |> task.or(cond: "all", else: task.arguments),
     )
-    |> shortdoc("Print package names")
-    |> flags(add: package_flags)
-    |> flags(add: style_flags)
-    |> parameter(
+    |> task.shortdoc("Print package names")
+    |> task.flags(add: package_flags)
+    |> task.flags(add: style_flags)
+    |> task.parameter(
       with: "..[packages]",
       of: "Package names (default: current project)",
     )
-    |> with_config,
+    |> task.with_config,
   )
-  |> task(
+  |> workbook.task(
     add: ["origin"]
-    |> new(run: origin)
-    |> shortdoc("Print the repository URL"),
+    |> task.new(run: origin)
+    |> task.shortdoc("Print the repository URL"),
   )
-  |> task(
+  |> workbook.task(
     add: ["ping"]
-    |> new(run: ping)
-    |> for(each: arguments)
-    |> shortdoc("Fetch HTTP status codes")
-    |> parameter(with: "..<uris>", of: "Request locations"),
+    |> task.new(run: ping)
+    |> task.for(each: task.arguments)
+    |> task.shortdoc("Fetch HTTP status codes")
+    |> task.parameter(with: "..<uris>", of: "Request locations"),
   )
-  |> task(
+  |> workbook.task(
     add: ["shell"]
-    |> new(run: shell)
-    |> shortdoc("Start a shell")
-    |> parameter(
+    |> task.new(run: shell)
+    |> task.shortdoc("Start a shell")
+    |> task.parameter(
       with: "[runtime]",
       of: "Runtime name or alias (default: erl; options: deno, erl, iex, node)",
     )
-    |> with_config,
+    |> task.with_config,
   )
-  |> task(
+  |> workbook.task(
     add: ["test"]
-    |> new(run: gleam(["test"]))
-    |> for(each: targets)
-    |> shortdoc("Run the project tests")
-    |> flags(add: target_flags),
+    |> task.new(run: task.gleam(["test"]))
+    |> task.for(each: task.targets)
+    |> task.shortdoc("Run the project tests")
+    |> task.flags(add: target_flags),
   )
-  |> task(
+  |> workbook.task(
     add: ["tree"]
-    |> new(run: tree)
-    |> shortdoc("Print the file structure"),
+    |> task.new(run: tree)
+    |> task.shortdoc("Print the file structure"),
   )
-  |> task(
+  |> workbook.task(
     add: ["version"]
-    |> new(run: version)
-    |> for(
-      each: packages
-      |> or(cond: "all", else: arguments),
+    |> task.new(run: version)
+    |> task.for(
+      each: task.packages
+      |> task.or(cond: "all", else: task.arguments),
     )
-    |> shortdoc("Print package versions")
-    |> flags(add: package_flags)
-    |> flag(
+    |> task.shortdoc("Print package versions")
+    |> task.flags(add: package_flags)
+    |> task.flag(
       called: "bare",
       explained: "Omit package names",
       expect: flag.bool,
       default: False,
     )
-    |> flags(add: style_flags)
-    |> parameter(
+    |> task.flags(add: style_flags)
+    |> task.parameter(
       with: "..[packages]",
       of: "Package names (default: current project)",
     )
-    |> with_config
-    |> with_manifest,
+    |> task.with_config
+    |> task.with_manifest,
   )
-  |> task(
+  |> workbook.task(
     add: ["watch"]
-    |> new(run: watch)
-    |> shortdoc("Automate project tasks")
-    |> flags(add: watch_flags),
+    |> task.new(run: watch)
+    |> task.shortdoc("Automate project tasks")
+    |> task.flags(add: watch_flags),
   )
-  |> task(
+  |> workbook.task(
     add: ["watch", "do"]
-    |> new(run: watch_do)
-    |> flags(add: watch_flags),
+    |> task.new(run: watch_do)
+    |> task.flags(add: watch_flags),
   )
 }
 
@@ -957,11 +957,9 @@ pub fn version(input: CommandInput, task: Task(Result)) -> Result {
       or: fn(_config) {
         assert Parsed(manifest) = task.manifest
         ["packages"]
-        // TODO: swap for gleam_stdlib > 0.22.1
-        //|> toml.decode(from: manifest, expect: dynamic.list(of: toml.from_dynamic))
         |> toml.decode(
           from: manifest,
-          expect: dynamic_list(of: toml.from_dynamic),
+          expect: dynamic.list(of: toml.from_dynamic),
         )
         |> result.unwrap(or: [])
         |> list.find_map(with: fn(toml) {
@@ -1179,7 +1177,7 @@ pub fn watch_do(input: CommandInput, _task: Task(Result)) -> Result {
   [#("target", target_flag)]
   |> map.from_list
   |> CommandInput(args: input.args)
-  |> task.trainer(gleam(["test"]))(task)
+  |> task.trainer(task.gleam(["test"]))(task)
 }
 
 fn hello_lucy(input: CommandInput, _task: Task(Result)) -> Result {
@@ -1306,49 +1304,4 @@ fn self_or_dependency(
     False -> dep_fun(config)
   }
   |> result.map(with: fn(item) { #(item, is_self) })
-}
-
-// TODO: remove for gleam_stdlib > 0.22.1
-fn dynamic_list(
-  of decoder_type: fn(dynamic.Dynamic) -> gleam.Result(a, dynamic.DecodeErrors),
-) -> dynamic.Decoder(List(a)) {
-  do_dynamic_list(decoder_type)
-}
-
-if erlang {
-  fn do_dynamic_list(decoder_type) {
-    dynamic.list(of: decoder_type)
-  }
-}
-
-if javascript {
-  fn do_dynamic_list(decoder_type) {
-    fn(dynamic) {
-      try list = decode_list(dynamic)
-      list
-      |> list.try_map(decoder_type)
-      |> result.map_error(with: list.map(_, with: push_path(_, "*")))
-    }
-  }
-
-  fn push_path(error, name) {
-    let name = dynamic.from(name)
-    let decoder =
-      dynamic.any([
-        dynamic.string,
-        fn(x) { result.map(dynamic.int(x), int.to_string) },
-      ])
-    let name = case decoder(name) {
-      Ok(name) -> name
-      Error(_) ->
-        ["<", dynamic.classify(name), ">"]
-        |> string.concat
-    }
-    dynamic.DecodeError(..error, path: [name, ..error.path])
-  }
-
-  external fn decode_list(
-    dynamic.Dynamic,
-  ) -> gleam.Result(List(dynamic.Dynamic), dynamic.DecodeErrors) =
-    "../../rad_ffi.mjs" "tmp_decode_list"
 }

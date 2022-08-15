@@ -4,7 +4,7 @@ import gleam/string
 import gleeunit/should
 import glint/flag
 import rad/workbook/standard
-import rad_test.{empty_input, input, run, task}
+import rad_test
 import shellout
 
 pub fn workbook_test() {
@@ -24,15 +24,15 @@ pub fn root_test() {
 
   let root =
     []
-    |> task(from: workbook)
+    |> rad_test.task(from: workbook)
 
   let help =
     ["help"]
-    |> task(from: workbook)
+    |> rad_test.task(from: workbook)
 
   let help =
-    empty_input()
-    |> run(help)
+    rad_test.empty_input()
+    |> rad_test.run(help)
 
   help
   |> should.be_ok
@@ -40,14 +40,14 @@ pub fn root_test() {
   let flags = [flag.bool(called: "version", default: False, explained: "")]
 
   []
-  |> input(flags: flags)
-  |> run(root)
+  |> rad_test.input(flags: flags)
+  |> rad_test.run(root)
   |> should.equal(help)
 
   let version =
     ["--version"]
-    |> input(flags: flags)
-    |> run(root)
+    |> rad_test.input(flags: flags)
+    |> rad_test.run(root)
 
   version
   |> should.be_ok
@@ -57,29 +57,29 @@ pub fn root_test() {
 
 pub fn config_test() {
   let flags = []
-  // TODO: swap out after bugfix
+  // TODO: swap for Gleam > 0.22.1
   //let task =
   //  ["config"]
-  //  |> task(from: standard.workbook())
-  let task = task(from: standard.workbook(), at: ["config"])
+  //  |> rad_test.task(from: standard.workbook())
+  let task = rad_test.task(from: standard.workbook(), at: ["config"])
 
   assert Ok(deps) =
     ["dependencies"]
-    |> input(flags: flags)
-    |> run(task)
+    |> rad_test.input(flags: flags)
+    |> rad_test.run(task)
 
   assert Ok(tasks) =
     ["rad", "tasks"]
-    |> input(flags: flags)
-    |> run(task)
+    |> rad_test.input(flags: flags)
+    |> rad_test.run(task)
 
   tasks
   |> should.not_equal(deps)
 
   assert Ok(json) =
     []
-    |> input(flags: flags)
-    |> run(task)
+    |> rad_test.input(flags: flags)
+    |> rad_test.run(task)
 
   json
   |> should.not_equal(deps)
@@ -93,97 +93,97 @@ pub fn config_test() {
   |> should.equal(True)
 
   [""]
-  |> input(flags: flags)
-  |> run(task)
+  |> rad_test.input(flags: flags)
+  |> rad_test.run(task)
   |> should.be_error
 
   ["rad", "unown"]
-  |> input(flags: flags)
-  |> run(task)
+  |> rad_test.input(flags: flags)
+  |> rad_test.run(task)
   |> should.be_error
 }
 
 pub fn name_test() {
   let flags = [flag.bool(called: "all", default: False, explained: "")]
-  // TODO: swap out after bugfix
+  // TODO: swap for Gleam > 0.22.1
   //let task =
   //  ["name"]
-  //  |> task(from: standard.workbook())
-  let task = task(from: standard.workbook(), at: ["name"])
+  //  |> rad_test.task(from: standard.workbook())
+  let task = rad_test.task(from: standard.workbook(), at: ["name"])
 
   assert Ok(rad) =
     []
-    |> input(flags: flags)
-    |> run(task)
+    |> rad_test.input(flags: flags)
+    |> rad_test.run(task)
 
   assert Ok(stdlib) =
     ["gleam_stdlib"]
-    |> input(flags: flags)
-    |> run(task)
+    |> rad_test.input(flags: flags)
+    |> rad_test.run(task)
 
   stdlib
   |> should.not_equal(rad)
 
   ["--all"]
-  |> input(flags: flags)
-  |> run(task)
+  |> rad_test.input(flags: flags)
+  |> rad_test.run(task)
   |> should.be_ok
 
   [""]
-  |> input(flags: flags)
-  |> run(task)
+  |> rad_test.input(flags: flags)
+  |> rad_test.run(task)
   |> should.be_error
 
   ["wobbuffet"]
-  |> input(flags: flags)
-  |> run(task)
+  |> rad_test.input(flags: flags)
+  |> rad_test.run(task)
   |> should.be_error
 }
 
 pub fn origin_test() {
   let flags = []
-  // TODO: swap out after bugfix
+  // TODO: swap for Gleam > 0.22.1
   //let task =
   //  ["origin"]
-  //  |> task(from: standard.workbook())
-  let task = task(from: standard.workbook(), at: ["origin"])
+  //  |> rad_test.task(from: standard.workbook())
+  let task = rad_test.task(from: standard.workbook(), at: ["origin"])
   []
-  |> input(flags: flags)
-  |> run(task)
+  |> rad_test.input(flags: flags)
+  |> rad_test.run(task)
   |> should.be_ok
 }
 
 pub fn ping_test() {
   let flags = []
-  // TODO: swap out after bugfix
+  // TODO: swap for Gleam > 0.22.1
   //let task =
   //  ["ping"]
-  //  |> task(from: standard.workbook())
-  let task = task(from: standard.workbook(), at: ["ping"])
+  //  |> rad_test.task(from: standard.workbook())
+  let task = rad_test.task(from: standard.workbook(), at: ["ping"])
 
   ["http://example.com/"]
-  |> input(flags: flags)
-  |> run(task)
+  |> rad_test.input(flags: flags)
+  |> rad_test.run(task)
   |> should.equal(Ok("200"))
 
   ["http://example.com/", "http://www.example.com/"]
-  |> input(flags: flags)
-  |> run(task)
+  |> rad_test.input(flags: flags)
+  |> rad_test.run(task)
   |> should.equal(Ok(""))
 
   []
-  |> input(flags: flags)
-  |> run(task)
+  |> rad_test.input(flags: flags)
+  |> rad_test.run(task)
   |> should.be_error
 }
 
 pub fn tree_test() {
   let flags = []
-  // TODO: swap out after bugfix
+  // TODO: swap for Gleam > 0.22.1
   //let task =
   //  ["tree"]
-  //  |> task(from: standard.workbook())
-  let task = task(from: standard.workbook(), at: ["tree"])
+  //  |> rad_test.task(from: standard.workbook())
+  let task = rad_test.task(from: standard.workbook(), at: ["tree"])
 
   let should_result =
     "exa"
@@ -193,8 +193,8 @@ pub fn tree_test() {
     |> result.unwrap(or: should.be_error)
 
   []
-  |> input(flags: flags)
-  |> run(task)
+  |> rad_test.input(flags: flags)
+  |> rad_test.run(task)
   |> should_result
 }
 
@@ -203,21 +203,21 @@ pub fn version_test() {
     flag.bool(called: "all", default: False, explained: ""),
     flag.bool(called: "bare", default: False, explained: ""),
   ]
-  // TODO: swap out after bugfix
+  // TODO: swap for Gleam > 0.22.1
   //let task =
   //  ["version"]
-  //  |> task(from: standard.workbook())
-  let task = task(from: standard.workbook(), at: ["version"])
+  //  |> rad_test.task(from: standard.workbook())
+  let task = rad_test.task(from: standard.workbook(), at: ["version"])
 
   assert Ok(bare) =
     ["--bare"]
-    |> input(flags: flags)
-    |> run(task)
+    |> rad_test.input(flags: flags)
+    |> rad_test.run(task)
 
   assert Ok(rad) =
     []
-    |> input(flags: flags)
-    |> run(task)
+    |> rad_test.input(flags: flags)
+    |> rad_test.run(task)
 
   rad
   |> should.not_equal(bare)
@@ -227,24 +227,24 @@ pub fn version_test() {
 
   assert Ok(stdlib) =
     ["gleam_stdlib"]
-    |> input(flags: flags)
-    |> run(task)
+    |> rad_test.input(flags: flags)
+    |> rad_test.run(task)
 
   stdlib
   |> should.not_equal(rad)
 
   ["--all"]
-  |> input(flags: flags)
-  |> run(task)
+  |> rad_test.input(flags: flags)
+  |> rad_test.run(task)
   |> should.be_ok
 
   [""]
-  |> input(flags: flags)
-  |> run(task)
+  |> rad_test.input(flags: flags)
+  |> rad_test.run(task)
   |> should.be_error
 
   ["ho-oh"]
-  |> input(flags: flags)
-  |> run(task)
+  |> rad_test.input(flags: flags)
+  |> rad_test.run(task)
   |> should.be_error
 }

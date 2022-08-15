@@ -5,7 +5,7 @@ import gleam/string
 import gleeunit/should
 import rad/task.{Parsed}
 import rad/workbook.{Workbook}
-import rad_test.{input, run, task}
+import rad_test
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 // Workbook Builder Functions             //
@@ -56,10 +56,21 @@ pub fn builder_test() {
   |> should.equal(3)
 
   workbook
-  |> workbook.delete(delete: ["clefairy", "clefable"])
-  |> workbook.delete(delete: [])
+  |> workbook.get(task: ["clefairy", "clefable"])
+  |> should.be_ok
+
+  let workbook =
+    workbook
+    |> workbook.delete(task: ["clefairy", "clefable"])
+    |> workbook.delete(task: [])
+
+  workbook
   |> map.size
   |> should.equal(1)
+
+  workbook
+  |> workbook.get(task: ["clefairy", "clefable"])
+  |> should.be_error
 }
 
 pub fn to_tasks_test() {
@@ -106,54 +117,54 @@ fn workbook() -> Workbook {
 pub fn help_test() {
   let help =
     ["help"]
-    |> task(from: workbook())
+    |> rad_test.task(from: workbook())
 
   ["help"]
-  |> input(flags: [])
-  |> run(help)
+  |> rad_test.input(flags: [])
+  |> rad_test.run(help)
   |> should.be_ok
 
   ["chansey"]
-  |> input(flags: [])
-  |> run(help)
+  |> rad_test.input(flags: [])
+  |> rad_test.run(help)
   |> should.be_ok
 
   let help_blissey =
     ["blissey"]
-    |> input(flags: [])
-    |> run(help)
+    |> rad_test.input(flags: [])
+    |> rad_test.run(help)
 
   help_blissey
   |> should.be_ok
 
   let blissey =
     ["blissey"]
-    |> task(from: workbook())
+    |> rad_test.task(from: workbook())
 
   ["blissey"]
-  |> input(flags: [])
-  |> run(blissey)
+  |> rad_test.input(flags: [])
+  |> rad_test.run(blissey)
   |> should.equal(help_blissey)
 
   []
-  |> input(flags: [])
-  |> run(help)
+  |> rad_test.input(flags: [])
+  |> rad_test.run(help)
   |> should.be_error
 
   ["snorlax"]
-  |> input(flags: [])
-  |> run(help)
+  |> rad_test.input(flags: [])
+  |> rad_test.run(help)
   |> should.be_error
 }
 
 pub fn info_test() {
   let chansey =
     ["chansey"]
-    |> task(from: workbook())
+    |> rad_test.task(from: workbook())
 
   []
-  |> input(flags: [])
-  |> run(chansey)
+  |> rad_test.input(flags: [])
+  |> rad_test.run(chansey)
   |> should.be_ok
 }
 

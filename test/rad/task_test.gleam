@@ -13,7 +13,7 @@ import rad/toml
 import rad/util
 import rad/workbook
 import rad/workbook/standard
-import rad_test.{empty_input, input, run, task}
+import rad_test
 import snag
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
@@ -32,8 +32,8 @@ pub fn builder_test() {
   |> should.equal(path)
 
   ["a", "b", "c"]
-  |> input(flags: [])
-  |> run(builder)
+  |> rad_test.input(flags: [])
+  |> rad_test.run(builder)
   |> should.be_ok
 
   builder.for
@@ -58,6 +58,7 @@ pub fn builder_test() {
   |> should.equal(None)
 
   // Update
+  let path = []
   let delimiter = ","
   let shortdoc = "Lucy, I'm home!"
   let #(_name, flag1_contents) as flag1 =
@@ -75,6 +76,7 @@ pub fn builder_test() {
   let parameter4 = #("[k]", "None")
   let builder =
     builder
+    |> task.path(insert: path)
     |> task.for(each: task.arguments)
     |> task.delimit(with: delimiter)
     |> task.shortdoc(insert: shortdoc)
@@ -97,13 +99,22 @@ pub fn builder_test() {
     |> task.with_config
     |> task.with_manifest
 
+  ["a", "b", "c"]
+  |> rad_test.input(flags: [])
+  |> rad_test.run(builder)
+  |> should.be_ok
+
+  let builder =
+    builder
+    |> task.runner(task.basic([""]))
+
+  []
+  |> rad_test.input(flags: [])
+  |> rad_test.run(builder)
+  |> should.be_error
+
   builder.path
   |> should.equal(path)
-
-  ["a", "b", "c"]
-  |> input(flags: [])
-  |> run(builder)
-  |> should.be_ok
 
   builder.for
   |> should.not_equal(Once)
@@ -308,15 +319,15 @@ pub fn config_test() {
     []
     |> task.new(run: runner)
     |> task.with_config
-  empty_input()
-  |> run(builder)
+  rad_test.empty_input()
+  |> rad_test.run(builder)
   |> should.be_ok
 
   let builder =
     []
     |> task.new(run: runner)
-  empty_input()
-  |> run(builder)
+  rad_test.empty_input()
+  |> rad_test.run(builder)
   |> should.be_error
 }
 
@@ -335,15 +346,15 @@ pub fn manifest_test() {
     []
     |> task.new(run: runner)
     |> task.with_manifest
-  empty_input()
-  |> run(builder)
+  rad_test.empty_input()
+  |> rad_test.run(builder)
   |> should.be_ok
 
   let builder =
     []
     |> task.new(run: runner)
-  empty_input()
-  |> run(builder)
+  rad_test.empty_input()
+  |> rad_test.run(builder)
   |> should.be_error
 }
 
@@ -351,15 +362,15 @@ pub fn basic_test() {
   let builder =
     []
     |> task.new(run: task.basic(["echo"]))
-  empty_input()
-  |> run(builder)
+  rad_test.empty_input()
+  |> rad_test.run(builder)
   |> should.be_ok
 
   let builder =
     []
     |> task.new(run: task.basic([""]))
-  empty_input()
-  |> run(builder)
+  rad_test.empty_input()
+  |> rad_test.run(builder)
   |> should.be_error
 }
 
@@ -369,13 +380,13 @@ pub fn gleam_test() {
     |> task.new(run: task.gleam([]))
 
   ["--", "--version"]
-  |> input(flags: [])
-  |> run(builder)
+  |> rad_test.input(flags: [])
+  |> rad_test.run(builder)
   |> should.be_ok
 
   ["help", "haaalp"]
-  |> input(flags: [])
-  |> run(builder)
+  |> rad_test.input(flags: [])
+  |> rad_test.run(builder)
   |> should.be_error
 }
 
@@ -410,20 +421,20 @@ pub fn trainer_test() {
     })
 
   ["1"]
-  |> input(flags: [])
-  |> run(builder)
+  |> rad_test.input(flags: [])
+  |> rad_test.run(builder)
   |> should.equal(Ok("oddish 1"))
 
   ["1", "2"]
-  |> input(flags: [])
-  |> run(builder)
+  |> rad_test.input(flags: [])
+  |> rad_test.run(builder)
   |> should.be_error
 
   let args = ["1", "3", "5"]
 
   args
-  |> input(flags: [])
-  |> run(builder)
+  |> rad_test.input(flags: [])
+  |> rad_test.run(builder)
   |> should.equal(
     args
     |> list.map(with: string.append(to: "oddish ", suffix: _))
@@ -436,13 +447,13 @@ pub fn trainer_test() {
     |> task.for(each: task.arguments)
 
   args
-  |> input(flags: [])
-  |> run(builder)
+  |> rad_test.input(flags: [])
+  |> rad_test.run(builder)
   |> should.equal(Ok(""))
 
   ["1", "2", "3"]
-  |> input(flags: [])
-  |> run(builder)
+  |> rad_test.input(flags: [])
+  |> rad_test.run(builder)
   |> should.be_error
 
   let builder =
@@ -455,8 +466,8 @@ pub fn trainer_test() {
     |> task.with_config
 
   ["name"]
-  |> input(flags: [])
-  |> run(builder)
+  |> rad_test.input(flags: [])
+  |> rad_test.run(builder)
   |> should.equal(Ok("rad"))
 
   let builder =
@@ -469,8 +480,8 @@ pub fn trainer_test() {
     |> task.with_manifest
 
   ["requirements", "gleam_stdlib"]
-  |> input(flags: [])
-  |> run(builder)
+  |> rad_test.input(flags: [])
+  |> rad_test.run(builder)
   |> should.be_ok
 }
 
@@ -498,8 +509,8 @@ pub fn tasks_from_config_test() {
 
   tasks
   |> list.map(with: fn(builder) {
-    empty_input()
-    |> run(builder)
+    rad_test.empty_input()
+    |> rad_test.run(builder)
   })
   |> result.all
   |> should.be_ok

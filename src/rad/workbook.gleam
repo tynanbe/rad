@@ -1,3 +1,4 @@
+import gleam
 import gleam/dynamic
 import gleam/function
 import gleam/list
@@ -82,10 +83,21 @@ pub fn tasks(into workbook: Workbook, add tasks: Tasks) -> Workbook {
   |> list.fold(from: workbook, with: task)
 }
 
+/// Results in the [`Task`](task.html#Task) with the given `path` on success, or
+/// `Nil` on failure.
+///
+pub fn get(
+  from workbook: Workbook,
+  task path: List(String),
+) -> gleam.Result(Task(Result), Nil) {
+  workbook
+  |> map.get(path)
+}
+
 /// Returns a new [`Workbook`](#Workbook) with any [`Task`](task.html#Task) at
 /// the given `path` removed.
 ///
-pub fn delete(from workbook: Workbook, delete path: List(String)) -> Workbook {
+pub fn delete(from workbook: Workbook, task path: List(String)) -> Workbook {
   workbook
   |> map.delete(delete: path)
 }

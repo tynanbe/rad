@@ -228,6 +228,29 @@ pub fn parameters(
   Task(..task, parameters: parameters)
 }
 
+/// Returns a new [`Task`](#Task) with the given `path`.
+///
+/// The `path` is a list of words that, when given in sequence using `rad`'s
+/// command line interface, invoke the [`Task`](#Task), which will then be
+/// processed together with any other input arguments and run by the `runner`.
+/// For example, if `rad` is invoked from the command line with
+/// `rad hearts gleam`, it will try to run a [`Task`](#Task) with the `path`:
+/// `["hearts", "gleam"]`.
+///
+pub fn path(into task: Task(a), insert path: List(String)) -> Task(a) {
+  Task(..task, path: path)
+}
+
+/// Returns a new [`Task`](#Task) with the given `runner`, which is assisted by
+/// a [`trainer`](#trainer) to reduce boilerplate code for common scenarios.
+///
+pub fn runner(
+  into task: Task(Result),
+  insert runner: Runner(Result),
+) -> Task(Result) {
+  Task(..task, run: trainer(runner))
+}
+
 /// Returns a new [`Task`](#Task) with the given short documentation string.
 ///
 pub fn shortdoc(into task: Task(a), insert description: String) -> Task(a) {
@@ -299,9 +322,7 @@ pub fn or(
       _else -> {
         let [item] = item
         item
-        // TODO: swap for gleam_stdlib > 0.22.1
-        //|> json.decode(using: dynamic.list(of: dynamic.string))
-        |> json.decode(using: dynamic_list(of: dynamic.string))
+        |> json.decode(using: dynamic.list(of: dynamic.string))
         |> result.unwrap(or: [])
         |> CommandInput(flags: input.flags)
       }
@@ -412,9 +433,9 @@ pub fn formatters() -> Iterable(a) {
 }
 
 fn formatters_from_config() -> List(gleam.Result(Formatter, Snag)) {
-  let dynamic_strings = fn(name) { // TODO: swap for gleam_stdlib > 0.22.1
-    //dynamic.field(named: name, of: dynamic.list(of: dynamic.string))
-    dynamic.field(named: name, of: dynamic_list(of: dynamic.string)) }
+  let dynamic_strings = fn(name) {
+    dynamic.field(named: name, of: dynamic.list(of: dynamic.string))
+  }
   let requirements =
     Formatter
     |> dynamic.decode3(
@@ -422,15 +443,13 @@ fn formatters_from_config() -> List(gleam.Result(Formatter, Snag)) {
       dynamic_strings("check"),
       dynamic_strings("run"),
     )
-  let toml =
+  let config =
     "gleam.toml"
     |> toml.parse_file
     |> result.lazy_unwrap(or: toml.new)
 
   ["rad", "formatters"]
-  // TODO: swap for gleam_stdlib > 0.22.1
-  //|> toml.decode(from: toml, expect: dynamic.list(of: toml.from_dynamic))
-  |> toml.decode(from: toml, expect: dynamic_list(of: toml.from_dynamic))
+  |> toml.decode(from: config, expect: dynamic.list(of: toml.from_dynamic))
   |> result.unwrap(or: [])
   |> list.map(with: toml.decode(from: _, get: [], expect: requirements))
 }
@@ -705,9 +724,9 @@ fn remove_common_path(a: List(String), b: List(String)) -> #(String, String) {
 /// optionally have a `shortdoc` key/value.
 ///
 pub fn tasks_from_config() -> List(gleam.Result(Task(Result), Snag)) {
-  let dynamic_strings = fn(name) { // TODO: swap for gleam_stdlib > 0.22.1
-    //dynamic.field(named: name, of: dynamic.list(of: dynamic.string))
-    dynamic.field(named: name, of: dynamic_list(of: dynamic.string)) }
+  let dynamic_strings = fn(name) {
+    dynamic.field(named: name, of: dynamic.list(of: dynamic.string))
+  }
   let requirements =
     fn(path, command) {
       path
@@ -718,9 +737,10 @@ pub fn tasks_from_config() -> List(gleam.Result(Task(Result), Snag)) {
   "gleam.toml"
   |> toml.parse_file
   |> result.lazy_unwrap(or: toml.new)
-  |> toml.decode(get: ["rad", "tasks"], // TODO: swap for gleam_stdlib > 0.22.1
-    //expect: dynamic.list(of: toml.from_dynamic),
-    expect: dynamic_list(of: toml.from_dynamic))
+  |> toml.decode(
+    get: ["rad", "tasks"],
+    expect: dynamic.list(of: toml.from_dynamic),
+  )
   |> result.unwrap(or: [])
   |> list.map(with: fn(toml) {
     try task =
@@ -734,49 +754,4 @@ pub fn tasks_from_config() -> List(gleam.Result(Task(Result), Snag)) {
     )
     |> Ok
   })
-}
-
-// TODO: remove for gleam_stdlib > 0.22.1
-fn dynamic_list(
-  of decoder_type: fn(dynamic.Dynamic) -> gleam.Result(a, dynamic.DecodeErrors),
-) -> dynamic.Decoder(List(a)) {
-  do_dynamic_list(decoder_type)
-}
-
-if erlang {
-  fn do_dynamic_list(decoder_type) {
-    dynamic.list(of: decoder_type)
-  }
-}
-
-if javascript {
-  fn do_dynamic_list(decoder_type) {
-    fn(dynamic) {
-      try list = decode_list(dynamic)
-      list
-      |> list.try_map(decoder_type)
-      |> result.map_error(with: list.map(_, with: push_path(_, "*")))
-    }
-  }
-
-  fn push_path(error, name) {
-    let name = dynamic.from(name)
-    let decoder =
-      dynamic.any([
-        dynamic.string,
-        fn(x) { result.map(dynamic.int(x), int.to_string) },
-      ])
-    let name = case decoder(name) {
-      Ok(name) -> name
-      Error(_) ->
-        ["<", dynamic.classify(name), ">"]
-        |> string.concat
-    }
-    dynamic.DecodeError(..error, path: [name, ..error.path])
-  }
-
-  external fn decode_list(
-    dynamic.Dynamic,
-  ) -> gleam.Result(List(dynamic.Dynamic), dynamic.DecodeErrors) =
-    "../rad_ffi.mjs" "tmp_decode_list"
 }
