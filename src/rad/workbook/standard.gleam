@@ -526,8 +526,13 @@ pub fn docs_build(input: CommandInput, task: Task(Result)) -> Result {
 /// input flags. For example, setting `--host=0.0.0.0` allows the server to
 /// respond to external requests.
 ///
-pub fn docs_serve(input: CommandInput, task: Task(Result)) -> Result {
-  try _output = docs_build(input, task)
+pub fn docs_serve(input: CommandInput, _task: Task(Result)) -> Result {
+  assert Ok(docs_build_task) =
+    ["docs", "build"]
+    |> workbook.get(from: workbook())
+  try _output =
+    input
+    |> docs_build_task.run(docs_build_task)
 
   io.println("")
 
@@ -1018,18 +1023,18 @@ pub fn version(input: CommandInput, task: Task(Result)) -> Result {
 ///   'n() shuf -i99-156 -n1; clear; rad version --color=$(n),$(n),$(n)'
 /// ```
 ///
-pub fn watch(input: CommandInput, task: Task(Result)) -> Result {
-  do_watch(input, task)
+pub fn watch(input: CommandInput, _task: Task(Result)) -> Result {
+  do_watch(input)
 }
 
 if erlang {
-  fn do_watch(_input: CommandInput, _task: Task(Result)) -> Result {
+  fn do_watch(_input: CommandInput) -> Result {
     util.refuse_erlang()
   }
 }
 
 if javascript {
-  fn do_watch(input: CommandInput, _task: Task(Result)) -> Result {
+  fn do_watch(input: CommandInput) -> Result {
     let options = [LetBeStderr, LetBeStdout]
     let [command, ..args] as watch_do = case input.args {
       [] -> {
@@ -1173,7 +1178,7 @@ pub fn watch_do(input: CommandInput, _task: Task(Result)) -> Result {
 
   assert Ok(task) =
     workbook()
-    |> map.get(["test"])
+    |> workbook.get(["test"])
   [#("target", target_flag)]
   |> map.from_list
   |> CommandInput(args: input.args)

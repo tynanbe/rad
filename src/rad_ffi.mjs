@@ -1,25 +1,52 @@
 import { Error, Ok, toList } from "./gleam.mjs";
 import { classify_dynamic } from "../../gleam_stdlib/dist/gleam_stdlib.mjs";
 import { DecodeError } from "../../gleam_stdlib/dist/gleam/dynamic.mjs";
+import * as shellout from "../../shellout/dist/shellout.mjs";
+import * as snag from "../../snag/dist/snag.mjs";
+import * as util from "../../rad/dist/rad/util.mjs";
 import * as TOML from "../priv/node_modules/@ltd/j-toml/index.mjs";
 import * as fs from "fs";
 import * as path from "path";
 
 const Nil = undefined;
+const LetBeStderr = new shellout.LetBeStderr();
+const LetBeStdout = new shellout.LetBeStdout();
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 // Runtime Functions                      //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
 const prefix = "./build/dev/javascript";
+const default_workbook = "../../rad/dist/rad/workbook/standard.mjs";
 
-export function gleam_run(module) {
+export function gleam_run(module_name) {
   let config = toml_read_file("./gleam.toml")[0];
   let project = toml_get(config, ["name"])[0];
-  import(path.join("../..", project, "dist", `${module}.mjs`)).then(
-    (module) => module.main(),
-  );
+  let pathname = path.join("../..", project, "dist", `${module_name}.mjs`);
+  let run_module = (module) => module.main();
+  import(pathname)
+    .then(run_module)
+    .catch(() => {
+      let arguments$ = toList(["build", "--target=javascript"]);
+      let options = toList([LetBeStderr, LetBeStdout]);
+      shellout.command("gleam", arguments$, ".", options);
+      console.log("");
+      import(`${pathname}?purge`)
+        .then((module) => {
+          if ("main" in module) {
+            run_module(module);
+          } else {
+            end_task(`\`${module_name}.main\` not found`);
+          }
+        })
+        .catch(() => end_task(`failed to load module \`${module_name}\``));
+    });
   return Nil;
+}
+
+function end_task(message) {
+  console.log(util.snag_pretty_print(snag.new$(message)));
+  import(default_workbook).then((module) => module.main());
 }
 
 export function ebin_paths() {

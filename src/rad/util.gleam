@@ -18,7 +18,7 @@ import snag.{Snag}
 
 if erlang {
   import gleam/erlang/atom
-  import gleam/erlang/file
+  import gleam/erlang/file.{Enoent}
 }
 
 /// Custom color [`Lookups`](https://hexdocs.pm/shellout/shellout.html#Lookups)
@@ -233,7 +233,10 @@ pub fn recursive_delete(path: String) -> Result(String, Snag) {
 
 if erlang {
   fn do_recursive_delete(path: String) -> Result(Nil, file.Reason) {
-    file.recursive_delete(path)
+    case file.recursive_delete(path) {
+      Error(Enoent) -> Ok(Nil)
+      result -> result
+    }
   }
 }
 

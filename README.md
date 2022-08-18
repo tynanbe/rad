@@ -20,11 +20,11 @@ live reloading of any clients connected to the docs server in addition to
 automated testing when saving files, for rapid feedback when coding and writing
 docs.
 
-Try this `rad` one-liner.
+Try this `rad` one-liner:
 
 ```shell
 $ # Press `Ctrl+Z` and use the `fg` command as needed
-$ rad docs serve --host=0.0.0.0 &; rad watch
+$ rad docs serve --all --host=0.0.0.0 &; rad watch
 ```
 
 Then, visit [`localhost:7000`](http://localhost:7000/), or open
@@ -180,7 +180,8 @@ $ rad <subcommand> [flags]
 ```
 
 More information about `rad`'s standard subcommands can be found in
-[`rad` hexdocs](https://hexdocs.pm/rad/rad/workbook/standard.html).
+[`rad` hexdocs](https://hexdocs.pm/rad/rad/workbook/standard.html) or with
+[`rad help`](https://hexdocs.pm/rad/rad/workbook.html#help).
 
 ### Configuration
 
