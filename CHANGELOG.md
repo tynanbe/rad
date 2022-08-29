@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.1 - 2022-08-29
 
 - Fixed a bug where rad failed to load ebins from symlinked directories.
 
