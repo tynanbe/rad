@@ -55,9 +55,18 @@ export function ebin_paths() {
     return new Ok(
       toList(
         fs
-          .readdirSync(prefix, { withFileTypes: true })
-          .filter((item) => item.isDirectory())
-          .map((subdir) => path_join(prefix, subdir.name, "ebin")),
+          .readdirSync(prefix)
+          .filter((item) => {
+            let dir;
+            try {
+              dir = fs.opendirSync(path.join(prefix, item, "ebin"));
+            } catch {
+              return false;
+            }
+            dir.close().catch(() => Nil);
+            return true;
+          })
+          .map((subdir) => path_join(prefix, subdir, "ebin")),
       ),
     );
   } catch {

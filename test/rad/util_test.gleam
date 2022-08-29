@@ -142,8 +142,8 @@ pub fn relay_flags_test() {
   |> util.relay_flags
   |> list.sort(by: string.compare)
   |> should.equal([
-    "--ditto=eevee", "--espeon=4,0,4", "--flareon=3", "--jolteon=2.0,0.2", "--umbreon=5",
-    "--vaporeon=1.0",
+    "--ditto=eevee", "--espeon=4,0,4", "--flareon=3", "--jolteon=2.0,0.2",
+    "--umbreon=5", "--vaporeon=1.0",
   ])
 
   []
