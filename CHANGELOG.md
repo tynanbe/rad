@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.2 - 2022-08-31
 
 - Fixed a bug where `rad --version` would crash.
 
