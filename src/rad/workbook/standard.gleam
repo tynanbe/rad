@@ -146,7 +146,8 @@ pub fn workbook() -> Workbook {
       expect: flag.bool,
       default: False,
     )
-    |> task.with_config,
+    |> task.with_config
+    |> task.with_manifest,
   )
   |> workbook.task(
     add: ["add"]
