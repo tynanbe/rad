@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.3 - 2022-09-23
 
 - Fixed a bug where rad's `gleam_stdlib` requirement was too restrictive.
 
