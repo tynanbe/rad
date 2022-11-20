@@ -37,7 +37,7 @@ pub fn ebin_paths_test() {
 pub fn javascript_run_test() {
   let run_module = fn(module) {
     [
-      "--eval=import('./build/dev/javascript/rad/dist/",
+      "--eval=import('./build/dev/javascript/rad/",
       module,
       ".mjs').then(module => module.main())",
     ]
@@ -126,9 +126,9 @@ pub fn relay_flags_test() {
     "eevee"
     |> flag.bool(default: False, explained: ""),
     "vaporeon"
-    |> flag.float(default: 1., explained: ""),
+    |> flag.float(default: 1.0, explained: ""),
     "jolteon"
-    |> flag.floats(default: [2., 0.2], explained: ""),
+    |> flag.floats(default: [2.0, 0.2], explained: ""),
     "flareon"
     |> flag.int(default: 3, explained: ""),
     "espeon"

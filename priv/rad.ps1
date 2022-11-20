@@ -1,5 +1,5 @@
 $self = "rad"
-$module = "./build/dev/javascript/${self}/dist/${self}.mjs"
+$module = "./build/dev/javascript/${self}/${self}.mjs"
 
 function Fail {
   param($message)

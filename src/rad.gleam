@@ -63,7 +63,7 @@ pub fn main() -> Nil {
       |> toml.decode(from: config, expect: dynamic.string)
       |> result.unwrap(
         or: case with {
-          "javascript" -> "../../rad/dist/"
+          "javascript" -> "../rad/"
           _else -> ""
         }
         |> string.append(suffix: default_workbook),
@@ -210,7 +210,7 @@ fn rad_run(with: String, fun: fn() -> Nil) -> Nil {
       [
         ["--title=rad"],
         [
-          "--eval=import('./build/dev/javascript/rad/dist/rad.mjs').then(module => module.main())",
+          "--eval=import('./build/dev/javascript/rad/rad.mjs').then(module => module.main())",
         ],
         ["--", ..shellout.arguments()],
       ]

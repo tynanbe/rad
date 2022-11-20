@@ -827,7 +827,7 @@ if javascript {
     }
     let javascript =
       [
-        ["import('", util.rad_path, "/dist/rad_ffi.mjs", "')"],
+        ["import('", util.rad_path, "/rad_ffi.mjs", "')"],
         [".then(module => module.load_modules())"],
       ]
       |> list.flatten

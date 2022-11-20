@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Support Gleam `v0.25`.
+
 ## v0.1.3 - 2022-09-23
 
 - Fixed a bug where rad's `gleam_stdlib` requirement was too restrictive.

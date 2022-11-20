@@ -1,12 +1,12 @@
-import { Error, Ok, toList } from "./gleam.mjs";
-import { classify_dynamic } from "../../gleam_stdlib/dist/gleam_stdlib.mjs";
-import { DecodeError } from "../../gleam_stdlib/dist/gleam/dynamic.mjs";
-import * as shellout from "../../shellout/dist/shellout.mjs";
-import * as snag from "../../snag/dist/snag.mjs";
-import * as util from "../../rad/dist/rad/util.mjs";
-import * as TOML from "../priv/node_modules/@ltd/j-toml/index.mjs";
 import * as fs from "fs";
 import * as path from "path";
+import { Error as GleamError, Ok, toList } from "./gleam.mjs";
+import { classify_dynamic } from "../gleam_stdlib/gleam_stdlib.mjs";
+import { DecodeError } from "../gleam_stdlib/gleam/dynamic.mjs";
+import * as shellout from "../shellout/shellout.mjs";
+import * as snag from "../snag/snag.mjs";
+import * as TOML from "./priv/node_modules/@ltd/j-toml/index.mjs";
+import * as util from "./rad/util.mjs";
 
 const Nil = undefined;
 const LetBeStderr = new shellout.LetBeStderr();
@@ -17,30 +17,28 @@ const LetBeStdout = new shellout.LetBeStdout();
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
 const prefix = "./build/dev/javascript";
-const default_workbook = "../../rad/dist/rad/workbook/standard.mjs";
+const default_workbook = "../rad/rad/workbook/standard.mjs";
 
 export function gleam_run(module_name) {
   let config = toml_read_file("./gleam.toml")[0];
   let project = toml_get(config, ["name"])[0];
-  let pathname = path.join("../..", project, "dist", `${module_name}.mjs`);
+  let pathname = path.join("..", project, `${module_name}.mjs`);
   let run_module = (module) => module.main();
-  import(pathname)
-    .then(run_module)
-    .catch(() => {
-      let arguments$ = toList(["build", "--target=javascript"]);
-      let options = toList([LetBeStderr, LetBeStdout]);
-      shellout.command("gleam", arguments$, ".", options);
-      console.log("");
-      import(`${pathname}?purge`)
-        .then((module) => {
-          if ("main" in module) {
-            run_module(module);
-          } else {
-            end_task(`\`${module_name}.main\` not found`);
-          }
-        })
-        .catch(() => end_task(`failed to load module \`${module_name}\``));
-    });
+  import(pathname).then(run_module).catch(() => {
+    let arguments$ = toList(["build", "--target=javascript"]);
+    let options = toList([LetBeStderr, LetBeStdout]);
+    shellout.command("gleam", arguments$, ".", options);
+    console.log("");
+    import(`${pathname}?purge`)
+      .then((module) => {
+        if ("main" in module) {
+          run_module(module);
+        } else {
+          end_task(`\`${module_name}.main\` not found`);
+        }
+      })
+      .catch(() => end_task(`failed to load module \`${module_name}\``));
+  });
   return Nil;
 }
 
@@ -70,7 +68,7 @@ export function ebin_paths() {
       ),
     );
   } catch {
-    return new Error(Nil);
+    return new GleamError(Nil);
   }
 }
 
@@ -84,25 +82,23 @@ export function load_modules() {
   mjs_paths()[0]
     .toArray()
     .map((item) => {
-      let name = item.replace(
-        new RegExp(`^${re_prefix}/[^/]+/dist/(.*)[.]mjs$`),
-        "$$$1",
-      ).replaceAll("/", "$");
-      item = item.replace(new RegExp(`^${re_prefix}`), "../..");
+      let name = item
+        .replace(new RegExp(`^${re_prefix}/[^/]+/(.*)[.]mjs$`), "$$$1")
+        .replaceAll("/", "$");
+      item = item.replace(new RegExp(`^${re_prefix}`), "..");
       return [name, item];
     })
-    .forEach(
-      (item) =>
-        import(item[1]).then(
-          (module) => globalThis[item[0]] = module,
-          (_error) => Nil,
-        ),
+    .forEach((item) =>
+      import(item[1]).then(
+        (module) => (globalThis[item[0]] = module),
+        (_error) => Nil,
+      ),
     );
   return Nil;
 }
 
 export function mjs_paths() {
-  let dist = (dirent) => path_join(prefix, dirent.name, "dist");
+  let dist = (dirent) => path_join(prefix, dirent.name);
   try {
     return new Ok(
       toList([
@@ -115,22 +111,20 @@ export function mjs_paths() {
       ]),
     );
   } catch {
-    return new Error(Nil);
+    return new GleamError(Nil);
   }
 }
 
 function do_mjs_paths(prefix) {
-  return (
-    fs
-      .readdirSync(prefix, { withFileTypes: true })
-      .filter((item) => "gleam.mjs" !== item.name)
-      .map((item) => {
-        let pathname = path_join(prefix, item.name);
-        return item.isDirectory() ? do_mjs_paths(pathname) : pathname;
-      })
-      .flat()
-      .filter((item) => item.endsWith(".mjs"))
-  );
+  return fs
+    .readdirSync(prefix, { withFileTypes: true })
+    .filter((item) => "gleam.mjs" !== item.name)
+    .map((item) => {
+      let pathname = path_join(prefix, item.name);
+      return item.isDirectory() ? do_mjs_paths(pathname) : pathname;
+    })
+    .flat()
+    .filter((item) => item.endsWith(".mjs"));
 }
 
 const ok_signals = [...Array(3)].map((_, i) => i + 385);
@@ -163,14 +157,14 @@ export function decode_object(data) {
     classify_dynamic(data),
     toList([]),
   );
-  return new Error(toList([decode_error]));
+  return new GleamError(toList([decode_error]));
 }
 
 export function toml_decode_every(toml, key_path, decoder) {
   let result = toml_get(toml, key_path);
   if (!result.isOk()) {
     let decode_error = new DecodeError("field", "nothing", key_path);
-    return new Error(toList([decode_error]));
+    return new GleamError(toList([decode_error]));
   }
   toml = result[0];
   let items = Object.keys(toml)
@@ -189,7 +183,7 @@ export function toml_get(parsed, key_path) {
     if (Nil !== value) {
       result = new Ok(value);
     } else {
-      return new Error(Nil);
+      return new GleamError(Nil);
     }
   }
   return result;
@@ -200,7 +194,7 @@ export function toml_read_file(pathname) {
     let content = fs.readFileSync(pathname, "utf-8");
     return new Ok(TOML.parse(content));
   } catch {
-    return new Error(Nil);
+    return new GleamError(Nil);
   }
 }
 
@@ -213,7 +207,7 @@ export function file_write(contents, pathname) {
     fs.writeFileSync(pathname, contents);
     return new Ok(Nil);
   } catch (err) {
-    return new Error(err);
+    return new GleamError(err);
   }
 }
 
@@ -230,7 +224,7 @@ export function make_directory(pathname) {
     fs.mkdirSync(pathname);
     return new Ok(Nil);
   } catch (err) {
-    return new Error(err.code);
+    return new GleamError(err.code);
   }
 }
 
@@ -239,7 +233,7 @@ export function recursive_delete(pathname) {
     fs.rmSync(pathname, { force: true, recursive: true });
     return new Ok(Nil);
   } catch (err) {
-    return new Error(err.code);
+    return new GleamError(err.code);
   }
 }
 
@@ -248,7 +242,7 @@ export function rename(source, dest) {
     fs.renameSync(source, dest);
     return new Ok(Nil);
   } catch (err) {
-    return new Error(err.code);
+    return new GleamError(err.code);
   }
 }
 
@@ -256,6 +250,6 @@ export function working_directory() {
   try {
     return new Ok(process.cwd());
   } catch {
-    return new Error(Nil);
+    return new GleamError(Nil);
   }
 }

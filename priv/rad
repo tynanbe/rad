@@ -3,7 +3,7 @@
 set -e
 
 self="rad"
-module="./build/dev/javascript/${self}/dist/${self}.mjs"
+module="./build/dev/javascript/${self}/${self}.mjs"
 
 fail() {
   message="${1}"
