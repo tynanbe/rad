@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.4 - 2022-11-20
 
 - Support Gleam `v0.25`.
 
