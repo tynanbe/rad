@@ -102,7 +102,7 @@ fn workbook() -> Workbook {
   |> workbook.task(
     add: ["chansey"]
     |> task.new(run: fn(_info, task) {
-      assert Parsed(config) = task.config
+      let assert Parsed(config) = task.config
       workbook.info(config)
     })
     |> task.with_config,

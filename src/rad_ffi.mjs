@@ -1,5 +1,6 @@
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import process from "node:process";
 import { Error as GleamError, Ok, toList } from "./gleam.mjs";
 import { classify_dynamic } from "../gleam_stdlib/gleam_stdlib.mjs";
 import { DecodeError } from "../gleam_stdlib/gleam/dynamic.mjs";
@@ -18,34 +19,6 @@ const LetBeStdout = new shellout.LetBeStdout();
 
 const prefix = "./build/dev/javascript";
 const default_workbook = "../rad/rad/workbook/standard.mjs";
-
-export function gleam_run(module_name) {
-  let config = toml_read_file("./gleam.toml")[0];
-  let project = toml_get(config, ["name"])[0];
-  let pathname = path.join("..", project, `${module_name}.mjs`);
-  let run_module = (module) => module.main();
-  import(pathname).then(run_module).catch(() => {
-    let arguments$ = toList(["build", "--target=javascript"]);
-    let options = toList([LetBeStderr, LetBeStdout]);
-    shellout.command("gleam", arguments$, ".", options);
-    console.log("");
-    import(`${pathname}?purge`)
-      .then((module) => {
-        if ("main" in module) {
-          run_module(module);
-        } else {
-          end_task(`\`${module_name}.main\` not found`);
-        }
-      })
-      .catch(() => end_task(`failed to load module \`${module_name}\``));
-  });
-  return Nil;
-}
-
-function end_task(message) {
-  console.log(util.snag_pretty_print(snag.new$(message)));
-  import(default_workbook).then((module) => module.main());
-}
 
 export function ebin_paths() {
   let prefix = "./build/dev/erlang";
@@ -77,6 +50,36 @@ function path_join(...paths) {
   return path.isAbsolute(pathname) ? pathname : `.${path.sep}${pathname}`;
 }
 
+export function encode_json(data) {
+  return globalThis.JSON.stringify(data);
+}
+
+export function gleam_run(package_name, module_name) {
+  let pathname = path.join("..", package_name, `${module_name}.mjs`);
+  let run_module = (module) => module.main();
+  import(pathname).then(run_module).catch(() => {
+    let arguments$ = toList(["build", "--target=javascript"]);
+    let options = toList([LetBeStderr, LetBeStdout]);
+    shellout.command("gleam", arguments$, ".", options);
+    console.log("");
+    import(`${pathname}?purge`)
+      .then((module) => {
+        if ("main" in module) {
+          run_module(module);
+        } else {
+          end_task(`\`${module_name}.main\` not found`);
+        }
+      })
+      .catch(() => end_task(`failed to load module \`${module_name}\``));
+  });
+  return Nil;
+}
+
+function end_task(message) {
+  console.log(util.snag_pretty_print(snag.new$(message)));
+  import(default_workbook).then((module) => module.main());
+}
+
 export function load_modules() {
   let re_prefix = prefix.replace(".", "[.]");
   mjs_paths()[0]
@@ -92,7 +95,7 @@ export function load_modules() {
       import(item[1]).then(
         (module) => (globalThis[item[0]] = module),
         (_error) => Nil,
-      ),
+      )
     );
   return Nil;
 }
@@ -118,7 +121,7 @@ export function mjs_paths() {
 function do_mjs_paths(prefix) {
   return fs
     .readdirSync(prefix, { withFileTypes: true })
-    .filter((item) => "gleam.mjs" !== item.name)
+    .filter((item) => !["gleam.mjs", "gleam.main.mjs"].includes(item.name))
     .map((item) => {
       let pathname = path_join(prefix, item.name);
       return item.isDirectory() ? do_mjs_paths(pathname) : pathname;
@@ -189,6 +192,10 @@ export function toml_get(parsed, key_path) {
   return result;
 }
 
+export function toml_new() {
+  return {};
+}
+
 export function toml_read_file(pathname) {
   try {
     let content = fs.readFileSync(pathname, "utf-8");
@@ -201,6 +208,10 @@ export function toml_read_file(pathname) {
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 // File System Functions                  //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+
+export function file_exists(pathname) {
+  return fs.existsSync(pathname);
+}
 
 export function file_write(contents, pathname) {
   try {

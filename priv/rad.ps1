@@ -8,8 +8,19 @@ function Fail {
   Exit 1
 }
 
+$config = "gleam.toml"
+if (-not (Test-Path -Type Leaf "./${config}")) {
+  Fail "error: ``${config}`` not found; ``${self}`` must be invoked from a Gleam project's base directory"
+}
+
+# Detect JavaScript runtime
+$runtime = "node"
+if (Select-String -Pattern '^\s*runtime\s*=\s*"deno"' -Path "./${config}") {
+  $runtime = "deno"
+}
+
 $snag = ""
-foreach ($dependency in "gleam", "node") {
+foreach ($dependency in "gleam", "${runtime}") {
   if (-not (Get-Command "${dependency}" -ErrorAction SilentlyContinue)) {
     if ("${snag}" -ne "") {
       $snag += "`n"
@@ -19,11 +30,6 @@ foreach ($dependency in "gleam", "node") {
 }
 if ("${snag}" -ne "") {
   Fail "${snag}"
-}
-
-$config = "gleam.toml"
-if (-not (Test-Path -Type Leaf "./${config}")) {
-  Fail "error: ``${config}`` not found; ``${self}`` must be invoked from a Gleam project's base directory"
 }
 
 # Compile if necessary.
@@ -40,10 +46,18 @@ if (-not (Test-Path -Type Leaf "${module}")) {
   Fail "error: ``${module}`` not found; try ``gleam add --dev ${self}``"
 }
 
-& node `
-  --experimental-fetch `
-  --experimental-repl-await `
-  --no-warnings `
-  --title="${self}" `
-  --eval="import('${module}').then(module => module.main())" `
-  -- @Args
+$script = "import('${module}').then(module => module.main())"
+if ("${runtime}" -eq "deno") {
+  & deno `
+    eval "${script}" `
+    --unstable `
+    -- @Args
+} else {
+  & node `
+    --experimental-fetch `
+    --experimental-repl-await `
+    --no-warnings `
+    --title="${self}" `
+    --eval="${script}" `
+    -- @Args
+}

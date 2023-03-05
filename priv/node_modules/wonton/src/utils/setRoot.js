@@ -1,5 +1,5 @@
-import { options, defaultRoot } from "../index.js";
-import fs from "fs";
+import * as fs from "node:fs";
+import { defaultRoot, options } from "../index.js";
 
 export const setRoot = () => {
   const { root } = options;

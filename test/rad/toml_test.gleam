@@ -13,7 +13,7 @@ pub fn new_test() {
 }
 
 pub fn parse_file_test() {
-  assert Ok(toml) =
+  let assert Ok(toml) =
     "gleam.toml"
     |> toml.parse_file
 
@@ -67,7 +67,7 @@ pub fn from_dynamic_test() {
 }
 
 pub fn decode_test() {
-  assert Ok(toml) =
+  let assert Ok(toml) =
     "gleam.toml"
     |> toml.parse_file
 
@@ -93,11 +93,11 @@ pub fn decode_test() {
 }
 
 pub fn decode_every_test() {
-  assert Ok(toml) =
+  let assert Ok(toml) =
     "gleam.toml"
     |> toml.parse_file
 
-  assert Ok(strings) =
+  let assert Ok(strings) =
     []
     |> toml.decode_every(from: toml, expect: dynamic.string)
 
@@ -109,16 +109,16 @@ pub fn decode_every_test() {
   |> list.key_find(find: "licences")
   |> should.be_error
 
-  assert Ok(tasks) =
+  let assert Ok(tasks) =
     ["rad", "tasks"]
     |> toml.decode(from: toml, expect: dynamic.list(of: toml.from_dynamic))
 
   tasks
   |> list.find(one_that: fn(task) {
-    assert Ok(lists) =
+    let assert Ok(lists) =
       []
       |> toml.decode_every(from: task, expect: dynamic.list(of: dynamic.string))
-    assert Ok(path) =
+    let assert Ok(path) =
       "path"
       |> list.key_find(in: lists)
     path == ["sparkles"]

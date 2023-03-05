@@ -1,5 +1,5 @@
 name = "rad"
-version = "0.1.4"
+version = "0.2.0-dev"
 description = "A task runner for Gleam projects"
 licences = ["Apache-2.0"]
 target = "javascript"
@@ -18,9 +18,9 @@ gleam_erlang = "~> 0.15"
 gleam_http = "~> 3.1"
 gleam_httpc = "~> 2.0"
 gleam_json = "~> 0.5"
-gleam_stdlib = "~> 0.23"
+gleam_stdlib = "~> 0.27"
 glint = "~> 0.8.0"
-shellout = "~> 1.0"
+shellout = "~> 1.2"
 snag = "~> 0.2"
 thoas = "~> 0.3"
 tomerl = "~> 0.5"
@@ -28,15 +28,26 @@ tomerl = "~> 0.5"
 [dev-dependencies]
 gleeunit = "~> 0.7"
 
+[javascript]
+runtime = "deno"
+
+[javascript.deno]
+allow_all = true
+
 [rad]
 workbook = "rad/workbook/standard"
 targets = ["erlang", "javascript"]
 with = "javascript"
 
 [[rad.formatters]]
+name = "erlang"
+check = ["erlfmt", "--check"]
+run = ["erlfmt", "--write", "src/rad_ffi.erl"]
+
+[[rad.formatters]]
 name = "javascript"
-check = ["rome", "ci", "--indent-style=space", "src", "test"]
-run = ["rome", "format", "--indent-style=space", "--write", "src", "test"]
+check = ["deno", "fmt", "--check"]
+run = ["deno", "fmt"]
 
 [[rad.tasks]]
 path = ["purple", "heart"]

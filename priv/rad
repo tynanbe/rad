@@ -11,8 +11,19 @@ fail() {
   exit 1
 }
 
+config="gleam.toml"
+if ! test -f "./${config}"; then
+  fail "error: \`${config}\` not found; \`${self}\` must be invoked from a Gleam project's base directory"
+fi
+
+# Detect JavaScript runtime
+runtime="node"
+if grep -q '^\s*runtime\s*=\s*"deno"' "./${config}"; then
+  runtime="deno"
+fi
+
 snag=""
-for dependency in "gleam" "node"; do
+for dependency in "gleam" "${runtime}"; do
   if ! type "${dependency}" > /dev/null 2>&1; then
     if test -n "${snag}"; then
       snag="${snag}\n"
@@ -22,11 +33,6 @@ for dependency in "gleam" "node"; do
 done
 if test -n "${snag}"; then
   fail "${snag}"
-fi
-
-config="gleam.toml"
-if ! test -f "./${config}"; then
-  fail "error: \`${config}\` not found; \`${self}\` must be invoked from a Gleam project's base directory"
 fi
 
 # Compile if necessary.
@@ -40,10 +46,18 @@ if ! test -f "${module}"; then
   fail "error: \`${module}\` not found; try \`gleam add --dev ${self}\`"
 fi
 
-exec node \
-  --experimental-fetch \
-  --experimental-repl-await \
-  --no-warnings \
-  --title="${self}" \
-  --eval="import('${module}').then(module => module.main())" \
-  -- "${@}"
+script="import('${module}').then(module => module.main())"
+if test "${runtime}" = "deno"; then
+  exec deno \
+    eval "${script}" \
+    --unstable \
+    -- "${@}"
+else
+  exec node \
+    --experimental-fetch \
+    --experimental-repl-await \
+    --no-warnings \
+    --title="${self}" \
+    --eval="${script}" \
+    -- "${@}"
+fi

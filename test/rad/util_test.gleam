@@ -11,10 +11,7 @@ import rad/util
 
 pub fn erlang_run_test() {
   let run_module = fn(module) {
-    let expression =
-      ["gleam@@main:run(", module, ")"]
-      |> string.concat
-    ["-noshell", "-eval", expression]
+    ["-noshell", "-eval", "rad@@main:run(" <> module <> ")"]
     |> util.erlang_run(opt: [])
   }
 
@@ -28,7 +25,7 @@ pub fn erlang_run_test() {
 }
 
 pub fn ebin_paths_test() {
-  assert Ok(ebin_paths) = util.ebin_paths()
+  let assert Ok(ebin_paths) = util.ebin_paths()
   ebin_paths
   |> list.find(one_that: fn(path) { path == "./build/dev/erlang/rad/ebin" })
   |> should.be_ok
@@ -36,14 +33,13 @@ pub fn ebin_paths_test() {
 
 pub fn javascript_run_test() {
   let run_module = fn(module) {
-    [
-      "--eval=import('./build/dev/javascript/rad/",
-      module,
-      ".mjs').then(module => module.main())",
-    ]
-    |> string.concat
-    |> list.repeat(times: 1)
-    |> util.javascript_run(opt: [])
+    let script =
+      "import('./build/dev/javascript/rad/" <> module <> ".mjs').then(module => module.main())"
+    util.javascript_run(
+      deno: ["eval", script, "--unstable"],
+      or: ["--eval=" <> script],
+      opt: [],
+    )
   }
 
   "rad"
