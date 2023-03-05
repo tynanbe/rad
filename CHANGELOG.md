@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.2.1 - 2023-03-05
+
+- Fixed some error messages in the `test` function.
+
 ## v0.2.0 - 2023-03-05
 
 - Rad now requires Gleam v0.27 or later.

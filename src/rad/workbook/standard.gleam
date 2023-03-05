@@ -952,10 +952,10 @@ pub fn test(input: CommandInput, task: Task(Result)) -> Result {
         or: ["--eval=" <> script],
         opt: options,
       )
-      |> result.replace_error(snag.new("`javascript/deno` tests failed"))
+      |> result.replace_error(snag.new("`javascript` tests failed"))
     }
 
-    _else -> snag.error("unsupported target/runtime `" <> target <> "`")
+    _else -> snag.error("unsupported target `" <> target <> "`")
   }
 }
 
