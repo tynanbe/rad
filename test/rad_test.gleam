@@ -70,7 +70,7 @@ pub fn input(args args: List(String), flags flags: List(Flag)) -> CommandInput {
 }
 
 pub fn task(from workbook: Workbook, at path: List(String)) -> Task(Result) {
-  assert Ok(task) =
+  let assert Ok(task) =
     workbook
     |> map.get(path)
   task

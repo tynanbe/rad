@@ -1,6 +1,6 @@
-import { log, error, getIp, isLoopback, style } from "./utils/index.js";
+import * as net from "node:net";
+import { error, getIp, isLoopback, log, style } from "./utils/index.js";
 import { options } from "./index.js";
-import net from "net";
 
 const logMessage = (currentPort, currentHost) => {
   const { port, protocol } = options;

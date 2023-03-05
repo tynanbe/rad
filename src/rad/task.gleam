@@ -300,7 +300,7 @@ pub fn or(
   else false_fun: fn() -> Iterable(a),
 ) -> fn() -> Iterable(a) {
   let cond = fn(input: CommandInput) {
-    assert Ok(flag.B(flag_value)) =
+    let assert Ok(flag.B(flag_value)) =
       flag_name
       |> flag.get_value(from: input.flags)
     case flag_value {
@@ -393,7 +393,7 @@ pub fn formatters() -> Iterable(a) {
 
   let mapper = fn(input: CommandInput, _task, index, _argument) {
     let io_println = util.quiet_or_println(input)
-    assert Ok(flag.B(check)) =
+    let assert Ok(flag.B(check)) =
       "check"
       |> flag.get_value(from: input.flags)
     let result =
@@ -462,8 +462,8 @@ fn formatters_from_config() -> List(gleam.Result(Formatter, Snag)) {
 ///
 pub fn packages() -> Iterable(a) {
   let items_fun = fn(_input, task: Task(a)) {
-    assert Parsed(toml) = task.config
-    assert Ok(self) =
+    let assert Parsed(toml) = task.config
+    let assert Ok(self) =
       ["name"]
       |> toml.decode(from: toml, expect: dynamic.string)
     let dependencies =
@@ -499,7 +499,7 @@ pub fn packages() -> Iterable(a) {
 ///
 pub fn targets() -> Iterable(a) {
   let items_fun = fn(input: CommandInput, _task) {
-    assert Ok(flag.LS(targets)) =
+    let assert Ok(flag.LS(targets)) =
       "target"
       |> flag.get_value(from: input.flags)
     targets
@@ -522,7 +522,7 @@ pub fn targets() -> Iterable(a) {
       ]
       |> string.concat
       |> io_println
-    assert Ok(flags) =
+    let assert Ok(flags) =
       ["--target=", target]
       |> string.concat
       |> flag.update_flags(in: input.flags)
@@ -743,9 +743,10 @@ pub fn tasks_from_config() -> List(gleam.Result(Task(Result), Snag)) {
   )
   |> result.unwrap(or: [])
   |> list.map(with: fn(toml) {
-    try task =
+    use task <- result.then(
       []
-      |> toml.decode(from: toml, expect: requirements)
+      |> toml.decode(from: toml, expect: requirements),
+    )
     task
     |> shortdoc(
       ["shortdoc"]

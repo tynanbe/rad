@@ -15,38 +15,53 @@ jobs:
 
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: "25.1"
+          otp-version: "25.2"
+          rebar3-version: "3"
           gleam-version: nightly
+
+      - uses: denoland/setup-deno@v1
+        with:
+          deno-version: "v1.x"
+
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.deno
+            ~/.cache/deno
+          key: ${{ runner.os }}-deno-${{ hashFiles('deno.lock') }}
 
       - uses: actions/setup-node@v3
         with:
           node-version: 18
 
-      - uses: charlieegan3/fetch-gh-release-binary@main
+      - uses: actions/checkout@v3
         with:
-          owner: rome
-          repo: tools
-          version: cli/v0.10.1-next
-          asset-pattern: linux-x64
-          install-path: /usr/local/bin/rome
-          verbose: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          repository: WhatsApp/erlfmt
+          path: _temp/erlfmt
 
-      - run: gleam format --check src test
+      - id: cache-erlfmt
+        uses: actions/cache@v3
+        with:
+          path: /usr/local/bin/erlfmt
+          key: ${{ runner.os }}-erlfmt-${{ hashFiles('_temp/erlfmt/src/erlfmt.app.src') }}
 
-      - run: rome ci --indent-style=space src test
+      - if: ${{ !steps.cache-erlfmt.outputs.cache-hit }}
+        run: |
+          cd _temp/erlfmt
+          rebar3 as release escriptize
+          mv _build/release/bin/erlfmt /usr/local/bin/
 
-      - run: gleam deps download
-
-      - uses: actions/cache@v3
+      - id: cache-gleam
+        uses: actions/cache@v3
         with:
           path: build/packages
-          key: ${{ runner.os }}-gleam-${{ hashFiles('**/manifest.toml') }}
-          restore-keys: ${{ runner.os }}-gleam-
+          key: ${{ runner.os }}-gleam-${{ hashFiles('manifest.toml') }}
 
-      - run: gleam build --target=javascript
+      - if: ${{ !steps.cache-gleam.outputs.cache-hit }}
+        run: gleam deps download
 
-      - run: gleam test --target=erlang
+      - run: echo "$PWD/priv" >> $GITHUB_PATH
 
-      - run: gleam test --target=javascript
+      - run: rad format --check
+
+      - run: rad test

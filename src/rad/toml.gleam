@@ -29,13 +29,14 @@ pub fn decode(
   get key_path: List(String),
   expect decoder: Decoder(a),
 ) -> Result(a, Snag) {
-  try item =
+  use item <- result.then(
     toml
     |> do_toml_get(key_path)
     |> result.map_error(with: fn(_nil) {
       path_message("failed to find item `", key_path, "`")
       |> snag.new
-    })
+    }),
+  )
 
   item
   |> decoder
@@ -43,14 +44,8 @@ pub fn decode(
 }
 
 if erlang {
-  fn do_toml_get(toml: Toml, key_path: List(String)) -> Result(Dynamic, Nil) {
-    toml
-    |> erlang_toml_get(key_path)
-    |> result.nil_error
-  }
-
-  external fn erlang_toml_get(Toml, List(String)) -> Result(Dynamic, Dynamic) =
-    "tomerl" "get"
+  external fn do_toml_get(Toml, List(String)) -> Result(Dynamic, Nil) =
+    "rad_ffi" "toml_get"
 }
 
 if javascript {
@@ -78,19 +73,20 @@ if erlang {
     key_path: List(String),
     decoder: Decoder(a),
   ) -> Result(List(#(String, a)), Snag) {
-    try map =
+    use map <- result.then(
       key_path
       |> decode(
         from: toml,
         expect: dynamic.from
         |> function.compose(dynamic.map(of: dynamic.string, to: dynamic.dynamic)),
-      )
+      ),
+    )
 
     map
     |> map.to_list
     |> list.filter_map(with: fn(tuple) {
       let key = ""
-      assert Ok(toml) =
+      let assert Ok(toml) =
         [#(key, tuple)]
         |> map.from_list
         |> dynamic.from
@@ -135,7 +131,7 @@ pub fn from_dynamic(data: Dynamic) -> Result(Toml, DecodeErrors) {
 
 if erlang {
   external fn decode_object(Dynamic) -> Result(Toml, DecodeErrors) =
-    "gleam_stdlib" "decode_map"
+    "rad_ffi" "decode_object"
 }
 
 if javascript {
@@ -151,12 +147,12 @@ pub fn new() -> Toml {
 
 if erlang {
   external fn do_new() -> Toml =
-    "maps" "new"
+    "rad_ffi" "toml_new"
 }
 
 if javascript {
   external fn do_new() -> Toml =
-    "" "globalThis.Object.prototype.constructor"
+    "../rad_ffi.mjs" "toml_new"
 }
 
 /// Results in a [`Toml`](#Toml) parsed from the given file `path` on success,
@@ -182,14 +178,8 @@ pub fn parse_file(path: String) -> Result(Toml, Snag) {
 }
 
 if erlang {
-  fn do_parse_file(path: String) -> Result(Dynamic, Nil) {
-    path
-    |> erlang_parse_file
-    |> result.nil_error
-  }
-
-  external fn erlang_parse_file(String) -> Result(Dynamic, Dynamic) =
-    "tomerl" "read_file"
+  external fn do_parse_file(String) -> Result(Dynamic, Nil) =
+    "rad_ffi" "toml_read_file"
 }
 
 if javascript {

@@ -1,0 +1,14 @@
+{
+  "fmt": {
+    "files": {
+      "include": [
+        "CHANGELOG.md",
+        "README.md",
+        "deno.json",
+        "priv/package.json",
+        "src",
+        "test"
+      ]
+    }
+  }
+}

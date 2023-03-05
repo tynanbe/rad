@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Rad now requires Gleam v0.27 or later.
+- Rad now supports the Deno JavaScript runtime (v1.30 or later).
+- The `rad/workbook/standard` module gains the `test` function.
+- The `javascript_run` function has been updated to accept arguments for both
+  the Deno and Node.js runtimes. It will choose which to use based on the
+  current project's `gleam.toml` config.
+- The `rad/util` module gains the `javascript_runtime` function.
+
 ## v0.1.4 - 2022-11-20
 
 - Support Gleam `v0.25`.

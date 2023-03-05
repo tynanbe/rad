@@ -1,7 +1,7 @@
 //// A motley assortment of utility functions.
 ////
 
-import gleam/dynamic.{Dynamic}
+import gleam/dynamic
 import gleam/float
 import gleam/function
 import gleam/int
@@ -13,11 +13,11 @@ import gleam/string
 import gleam/string_builder
 import glint.{CommandInput}
 import glint/flag
+import rad/toml
 import shellout.{CommandOpt, LetBeStderr, LetBeStdout, Lookups}
 import snag.{Snag}
 
 if erlang {
-  import gleam/erlang/atom
   import gleam/erlang/file.{Enoent}
 }
 
@@ -90,17 +90,47 @@ if javascript {
     "../rad_ffi.mjs" "ebin_paths"
 }
 
-/// Runs Node.js with the given arguments and shellout
+/// Runs Deno or Node.js (depending on the JavaScript runtime specified in your
+/// project's `gleam.toml` config) with the given arguments and shellout
 /// [`CommandOpt`](https://hexdocs.pm/shellout/shellout.html#CommandOpt)s. All
 /// dependency and project modules are preloaded and accessible.
 ///
 pub fn javascript_run(
-  with args: List(String),
+  deno deno_args: List(String),
+  or nodejs_args: List(String),
   opt options: List(CommandOpt),
 ) -> Result(String, Snag) {
-  ["--experimental-fetch", "--experimental-repl-await", "--no-warnings", ..args]
-  |> shellout.command(run: "node", in: ".", opt: options)
-  |> result.replace_error(snag.new("failed to run `node`"))
+  let command = javascript_runtime()
+  case command {
+    "deno" -> deno_args
+    _else -> [
+      "--experimental-fetch",
+      "--experimental-repl-await",
+      "--no-warnings",
+      ..nodejs_args
+    ]
+  }
+  |> shellout.command(run: command, in: ".", opt: options)
+  |> result.replace_error(snag.new("failed to run `" <> command <> "`"))
+}
+
+/// Returns a JavaScript runtime command name based on your project's
+/// `gleam.toml` config.
+///
+/// Can be `"node"` or `"deno"`; `"node"` is the default.
+///
+pub fn javascript_runtime() -> String {
+  "gleam.toml"
+  |> toml.parse_file
+  |> result.lazy_unwrap(or: toml.new)
+  |> toml.decode(get: ["javascript", "runtime"], expect: dynamic.string)
+  |> result.map(with: fn(runtime) {
+    case runtime {
+      "deno" -> "deno"
+      _else -> "node"
+    }
+  })
+  |> result.unwrap(or: "node")
 }
 
 /// Results in an error meant to notify users that a [`Task`](task.html#Task)
@@ -132,7 +162,7 @@ if erlang {
 
 if javascript {
   external fn do_file_exists(String) -> Bool =
-    "" "globalThis.fs.existsSync"
+    "../rad_ffi.mjs" "file_exists"
 }
 
 /// Tries to write some `contents` to a file at the given `path`.
@@ -161,7 +191,7 @@ if erlang {
 }
 
 if javascript {
-  external fn do_file_write(String, String) -> Result(Nil, Dynamic) =
+  external fn do_file_write(String, String) -> Result(Nil, dynamic.Dynamic) =
     "../rad_ffi.mjs" "file_write"
 }
 
@@ -255,44 +285,13 @@ pub fn rename(from source: String, to dest: String) -> Result(String, Snag) {
   |> do_rename(dest)
   |> result.replace("")
   |> result.map_error(with: fn(_reason) {
-    ["failed to rename `", source, "` to `", dest, "`"]
-    |> string.concat
-    |> snag.new
+    snag.new("failed to rename `" <> source <> "` to `" <> dest <> "`")
   })
 }
 
 if erlang {
-  fn do_rename(source: String, dest: String) -> Result(Dynamic, Dynamic) {
-    source
-    |> erlang_rename(dest)
-    |> dynamic.any(of: [
-      fn(data) {
-        data
-        |> atom.from_dynamic
-        |> result.map(with: fn(atom) {
-          case atom == atom.create_from_string("ok") {
-            True ->
-              Nil
-              |> dynamic.from
-              |> Ok
-            False ->
-              atom
-              |> dynamic.from
-              |> Error
-          }
-        })
-      },
-      dynamic.result(ok: dynamic.dynamic, error: dynamic.dynamic),
-    ])
-    |> result.lazy_unwrap(or: fn() {
-      Nil
-      |> dynamic.from
-      |> Error
-    })
-  }
-
-  external fn erlang_rename(String, String) -> Dynamic =
-    "file" "rename"
+  external fn do_rename(String, String) -> Result(Nil, file.Reason) =
+    "rad_ffi" "rename"
 }
 
 if javascript {
@@ -310,7 +309,7 @@ pub fn working_directory() -> Result(String, Snag) {
 
 if erlang {
   external fn do_working_directory() -> Result(String, file.Reason) =
-    "file" "get_cwd"
+    "rad_ffi" "working_directory"
 }
 
 if javascript {
@@ -330,12 +329,12 @@ pub fn encode_json(data: a) -> String {
 
 if erlang {
   external fn do_encode_json(a) -> String =
-    "thoas" "encode"
+    "rad_ffi" "encode_json"
 }
 
 if javascript {
   external fn do_encode_json(a) -> String =
-    "" "globalThis.JSON.stringify"
+    "../rad_ffi.mjs" "encode_json"
 }
 
 /// Turns a [`Snag`](https://hexdocs.pm/snag/snag.html#Snag) into a multiline
@@ -455,7 +454,7 @@ pub fn which_rad() -> String {
     })
   }
 
-  assert Ok(path) =
+  let assert Ok(path) =
     "rad"
     |> shellout.which
     |> result.nil_error

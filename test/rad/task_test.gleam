@@ -150,7 +150,7 @@ pub fn arguments_test() {
     iterable_builder()
     |> task.for(each: task.arguments)
 
-  assert Each(get: items_fun, map: mapper) = builder.for
+  let assert Each(get: items_fun, map: mapper) = builder.for
 
   input
   |> items_fun(builder)
@@ -168,7 +168,7 @@ pub fn formatters_test() {
     iterable_builder()
     |> task.for(each: task.formatters)
 
-  assert Each(get: items_fun, map: mapper) = builder.for
+  let assert Each(get: items_fun, map: mapper) = builder.for
 
   case items_fun(input, builder) {
     [_gleam, _javascript, ..] -> True
@@ -191,7 +191,7 @@ pub fn packages_test() {
     iterable_builder()
     |> task.for(each: task.packages)
 
-  assert Each(get: items_fun, map: mapper) = builder.for
+  let assert Each(get: items_fun, map: mapper) = builder.for
 
   let items = items_fun(input, builder)
 
@@ -215,11 +215,11 @@ pub fn targets_test() {
     iterable_builder()
     |> task.for(each: task.targets)
 
-  assert Ok(flag.LS(targets)) =
+  let assert Ok(flag.LS(targets)) =
     "target"
     |> flag.get_value(from: input.flags)
 
-  assert Each(get: items_fun, map: mapper) = builder.for
+  let assert Each(get: items_fun, map: mapper) = builder.for
 
   input
   |> items_fun(builder)
@@ -227,7 +227,7 @@ pub fn targets_test() {
 
   let item = mapper(input, builder, 0, ["erlang"])
 
-  assert Ok(flag.LS(target)) =
+  let assert Ok(flag.LS(target)) =
     "target"
     |> flag.get_value(from: item.flags)
 
@@ -244,7 +244,7 @@ pub fn or_test() {
       |> task.or(cond: "all", else: task.arguments),
     )
 
-  assert Each(get: items_fun, ..) = builder.for
+  let assert Each(get: items_fun, ..) = builder.for
 
   let items = items_fun(input, builder)
 
@@ -279,7 +279,7 @@ fn iterable_builder() {
 }
 
 fn iterable_input() {
-  assert Ok(flags) =
+  let assert Ok(flags) =
     iterable_flags()
     |> map.from_list
     |> flag.update_flags(with: "--target=erlang,javascript")
@@ -401,10 +401,11 @@ pub fn trainer_test() {
           |> string.join(with: " ")
           |> snag.new
           |> function.constant
-        try maybe_oddish =
+        use maybe_oddish <- result.then(
           arg
           |> int.parse
-          |> result.map_error(with: not_oddish)
+          |> result.map_error(with: not_oddish),
+        )
         case int.is_odd(maybe_oddish) {
           True ->
             ["oddish", arg]
@@ -459,7 +460,7 @@ pub fn trainer_test() {
   let builder =
     []
     |> task.new(run: fn(input, task) {
-      assert Parsed(toml) = task.config
+      let assert Parsed(toml) = task.config
       input.args
       |> toml.decode(from: toml, expect: dynamic.string)
     })
@@ -473,7 +474,7 @@ pub fn trainer_test() {
   let builder =
     []
     |> task.new(run: fn(input, task) {
-      assert Parsed(toml) = task.manifest
+      let assert Parsed(toml) = task.manifest
       input.args
       |> toml.decode(from: toml, expect: dynamic.string)
     })

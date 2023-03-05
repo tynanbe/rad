@@ -15,10 +15,6 @@ import rad/workbook.{Workbook}
 import shellout.{LetBeStderr, LetBeStdout}
 import snag.{Snag}
 
-if erlang {
-  import gleam/erlang/atom.{Atom}
-}
-
 const default_workbook = "rad/workbook/standard"
 
 /// Runs `rad`, a flexible task runner companion for the `gleam` build manager.
@@ -39,12 +35,12 @@ pub fn main() -> Nil {
     ["rad", "with"]
     |> toml.decode(from: config, expect: dynamic.string)
     |> result.unwrap(or: "javascript")
-  assert Ok(Out(with)) =
+  let assert Ok(Out(with)) =
     glint.new()
     |> glint.add_command(
       at: [],
       do: fn(input) {
-        assert Ok(flag.S(with)) =
+        let assert Ok(flag.S(with)) =
           "with"
           |> flag.get_value(from: input.flags)
         with
@@ -55,22 +51,21 @@ pub fn main() -> Nil {
     )
     |> glint.execute(arguments(Global))
 
+  let assert Ok(package) =
+    ["name"]
+    |> toml.decode(from: config, expect: dynamic.string)
+
   // Try to run any task `with` a given runtime
-  rad_run(
-    with,
-    fn() {
-      ["rad", "workbook"]
-      |> toml.decode(from: config, expect: dynamic.string)
-      |> result.unwrap(
-        or: case with {
-          "javascript" -> "../rad/"
-          _else -> ""
-        }
-        |> string.append(suffix: default_workbook),
-      )
-      |> gleam_run
-    },
+  use <- rad_run(package, with)
+  ["rad", "workbook"]
+  |> toml.decode(from: config, expect: dynamic.string)
+  |> result.unwrap(
+    or: case with {
+      "javascript" -> "../rad/"
+      _else -> ""
+    } <> default_workbook,
   )
+  |> gleam_run(package, _)
 }
 
 /// Applies arguments from the command line to the given
@@ -167,9 +162,7 @@ fn end_task(result: Result(String, Snag)) -> Nil {
     Ok(output) -> {
       case output {
         "" -> output
-        _else ->
-          [string.trim(output), "\n"]
-          |> string.concat
+        _else -> string.trim(output) <> "\n"
       }
       |> io.print
       shellout.exit(0)
@@ -183,22 +176,22 @@ fn end_task(result: Result(String, Snag)) -> Nil {
   }
 }
 
-fn rad_run(with: String, fun: fn() -> Nil) -> Nil {
+fn rad_run(package: String, with: String, fun: fn() -> Nil) -> Nil {
   case is_running(with), with {
     True, _any -> fun()
 
     _else_if, "erlang" ->
       {
-        try _output = case
+        use _output <- result.then(case
           util.file_exists("./build/dev/erlang/rad/ebin/rad.app")
         {
           True -> Ok("")
           False -> gleam_build("erlang")
-        }
+        })
         // Run `rad` with Erlang
         [
           ["-noshell"],
-          ["-eval", "gleam@@main:run(rad)"],
+          ["-eval", package <> "@@main:run(rad)"],
           ["-extra", ..shellout.arguments()],
         ]
         |> list.flatten
@@ -206,22 +199,19 @@ fn rad_run(with: String, fun: fn() -> Nil) -> Nil {
       }
       |> end_task
 
-    _else_if, "javascript" ->
-      [
-        ["--title=rad"],
-        [
-          "--eval=import('./build/dev/javascript/rad/rad.mjs').then(module => module.main())",
-        ],
-        ["--", ..shellout.arguments()],
-      ]
-      |> list.flatten
-      |> util.javascript_run(opt: [LetBeStderr, LetBeStdout])
+    _else_if, "javascript" -> {
+      let script =
+        "import('./build/dev/javascript/rad/rad.mjs').then(module => module.main())"
+      util.javascript_run(
+        deno: ["eval", script, "--unstable", "--", ..shellout.arguments()],
+        or: ["--eval=" <> script, "--title=rad", "--", ..shellout.arguments()],
+        opt: [LetBeStderr, LetBeStdout],
+      )
       |> end_task
+    }
 
     _else, _any ->
-      ["unknown target `", with, "`"]
-      |> string.concat
-      |> snag.error
+      snag.error("unknown target `" <> with <> "`")
       |> snag.context("failed to run task")
       |> end_task
   }
@@ -252,116 +242,45 @@ if javascript {
 }
 
 fn gleam_build(target: String) -> Result(String, Snag) {
-  let target =
-    ["--target=", target]
-    |> string.concat
+  let target = "--target=" <> target
   ["build", target]
   |> shellout.command(run: "gleam", in: ".", opt: [LetBeStderr, LetBeStdout])
   |> result.replace_error(snag.new("failed to run task"))
 }
 
-fn gleam_run(module: String) -> Nil {
-  do_gleam_run(module)
+fn gleam_run(package: String, module: String) -> Nil {
+  do_gleam_run(package, module)
 }
 
 if erlang {
-  fn do_gleam_run(module: String) -> Nil {
+  fn do_gleam_run(package: String, module: String) -> Nil {
     let _result =
-      module
-      |> maybe_run
+      package
+      |> maybe_run(module)
       |> result.lazy_or(fn() {
         let result = gleam_build("erlang")
         io.println("")
         result
-        |> result.then(apply: fn(_result) { maybe_run(module) })
+        |> result.then(apply: fn(_result) { maybe_run(package, module) })
       })
       |> result.map_error(with: fn(snag) {
         let _nil =
           snag
           |> util.snag_pretty_print
           |> io.println
-        default_workbook
-        |> atomize
-        |> erlang_gleam_run
+        erlang_gleam_run(package, default_workbook)
       })
     Nil
   }
 
-  fn maybe_run(module: String) -> Result(String, Snag) {
-    try _result =
-      module
-      |> ensure_loaded
-    case function_exported(module, "main", 0) {
-      True -> {
-        let _dynamic =
-          module
-          |> atomize
-          |> erlang_gleam_run
-        Ok("")
-      }
-      False ->
-        ["`", module, ".main` not found"]
-        |> string.concat
-        |> snag.error
-    }
-  }
+  external fn maybe_run(String, String) -> Result(String, Snag) =
+    "rad_ffi" "maybe_run"
 
-  fn ensure_loaded(module: String) -> Result(String, Snag) {
-    let error = atom.create_from_string("error")
-    let atoms =
-      module
-      |> atomize
-      |> code_purge
-      |> code_delete
-      |> do_ensure_loaded
-    case atoms {
-      #(result, _any) if result == error ->
-        ["failed to load module `", module, "`"]
-        |> string.concat
-        |> snag.error
-      _else -> Ok(module)
-    }
-  }
-
-  fn atomize(module: String) -> Atom {
-    module
-    |> string.replace(each: "/", with: "@")
-    |> atom.create_from_string
-  }
-
-  fn code_purge(module: Atom) -> Atom {
-    let _bool = do_code_purge(module)
-    module
-  }
-
-  external fn do_code_purge(Atom) -> Bool =
-    "code" "purge"
-
-  fn code_delete(module: Atom) -> Atom {
-    let _bool = do_code_delete(module)
-    module
-  }
-
-  external fn do_code_delete(Atom) -> Bool =
-    "code" "delete"
-
-  external fn do_ensure_loaded(Atom) -> #(Atom, Atom) =
-    "code" "ensure_loaded"
-
-  fn function_exported(module: String, fun: String, arity: Int) -> Bool {
-    let module = atomize(module)
-    let fun = atom.create_from_string(fun)
-    do_function_exported(module, fun, arity)
-  }
-
-  external fn do_function_exported(Atom, Atom, Int) -> Bool =
-    "erlang" "function_exported"
-
-  external fn erlang_gleam_run(Atom) -> dynamic.Dynamic =
-    "gleam@@main" "run"
+  external fn erlang_gleam_run(String, String) -> dynamic.Dynamic =
+    "rad_ffi" "gleam_run"
 }
 
 if javascript {
-  external fn do_gleam_run(String) -> Nil =
+  external fn do_gleam_run(String, String) -> Nil =
     "./rad_ffi.mjs" "gleam_run"
 }

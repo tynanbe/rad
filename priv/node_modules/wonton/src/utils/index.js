@@ -1,5 +1,6 @@
+export * from "./fn.js";
 export { addClient } from "./addClient.js";
-export { checkTLSOptions } from "./checkTLSOptions.js";
+export { checkTlsOptions } from "./checkTlsOptions.js";
 export { error } from "./error.js";
 export { getFilePath } from "./getFilePath.js";
 export { getIp } from "./getIp.js";
@@ -15,4 +16,3 @@ export { showDirectory } from "./showDirectory.js";
 export { showError } from "./showError.js";
 export { showFile } from "./showFile.js";
 export { style } from "./style.js";
-export * from "./fn.js";

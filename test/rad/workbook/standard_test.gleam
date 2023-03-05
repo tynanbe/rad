@@ -57,18 +57,16 @@ pub fn root_test() {
 
 pub fn config_test() {
   let flags = []
-  // TODO: swap for Gleam > 0.22.1
-  //let task =
-  //  ["config"]
-  //  |> rad_test.task(from: standard.workbook())
-  let task = rad_test.task(from: standard.workbook(), at: ["config"])
+  let task =
+    ["config"]
+    |> rad_test.task(from: standard.workbook())
 
-  assert Ok(deps) =
+  let assert Ok(deps) =
     ["dependencies"]
     |> rad_test.input(flags: flags)
     |> rad_test.run(task)
 
-  assert Ok(tasks) =
+  let assert Ok(tasks) =
     ["rad", "tasks"]
     |> rad_test.input(flags: flags)
     |> rad_test.run(task)
@@ -76,7 +74,7 @@ pub fn config_test() {
   tasks
   |> should.not_equal(deps)
 
-  assert Ok(json) =
+  let assert Ok(json) =
     []
     |> rad_test.input(flags: flags)
     |> rad_test.run(task)
@@ -105,18 +103,16 @@ pub fn config_test() {
 
 pub fn name_test() {
   let flags = [flag.bool(called: "all", default: False, explained: "")]
-  // TODO: swap for Gleam > 0.22.1
-  //let task =
-  //  ["name"]
-  //  |> rad_test.task(from: standard.workbook())
-  let task = rad_test.task(from: standard.workbook(), at: ["name"])
+  let task =
+    ["name"]
+    |> rad_test.task(from: standard.workbook())
 
-  assert Ok(rad) =
+  let assert Ok(rad) =
     []
     |> rad_test.input(flags: flags)
     |> rad_test.run(task)
 
-  assert Ok(stdlib) =
+  let assert Ok(stdlib) =
     ["gleam_stdlib"]
     |> rad_test.input(flags: flags)
     |> rad_test.run(task)
@@ -142,11 +138,9 @@ pub fn name_test() {
 
 pub fn origin_test() {
   let flags = []
-  // TODO: swap for Gleam > 0.22.1
-  //let task =
-  //  ["origin"]
-  //  |> rad_test.task(from: standard.workbook())
-  let task = rad_test.task(from: standard.workbook(), at: ["origin"])
+  let task =
+    ["origin"]
+    |> rad_test.task(from: standard.workbook())
   []
   |> rad_test.input(flags: flags)
   |> rad_test.run(task)
@@ -155,11 +149,9 @@ pub fn origin_test() {
 
 pub fn ping_test() {
   let flags = []
-  // TODO: swap for Gleam > 0.22.1
-  //let task =
-  //  ["ping"]
-  //  |> rad_test.task(from: standard.workbook())
-  let task = rad_test.task(from: standard.workbook(), at: ["ping"])
+  let task =
+    ["ping"]
+    |> rad_test.task(from: standard.workbook())
 
   ["http://example.com/"]
   |> rad_test.input(flags: flags)
@@ -179,11 +171,9 @@ pub fn ping_test() {
 
 pub fn tree_test() {
   let flags = []
-  // TODO: swap for Gleam > 0.22.1
-  //let task =
-  //  ["tree"]
-  //  |> rad_test.task(from: standard.workbook())
-  let task = rad_test.task(from: standard.workbook(), at: ["tree"])
+  let task =
+    ["tree"]
+    |> rad_test.task(from: standard.workbook())
 
   let should_result =
     "exa"
@@ -195,6 +185,7 @@ pub fn tree_test() {
   []
   |> rad_test.input(flags: flags)
   |> rad_test.run(task)
+  |> result.replace_error("")
   |> should_result
 }
 
@@ -203,18 +194,16 @@ pub fn version_test() {
     flag.bool(called: "all", default: False, explained: ""),
     flag.bool(called: "bare", default: False, explained: ""),
   ]
-  // TODO: swap for Gleam > 0.22.1
-  //let task =
-  //  ["version"]
-  //  |> rad_test.task(from: standard.workbook())
-  let task = rad_test.task(from: standard.workbook(), at: ["version"])
+  let task =
+    ["version"]
+    |> rad_test.task(from: standard.workbook())
 
-  assert Ok(bare) =
+  let assert Ok(bare) =
     ["--bare"]
     |> rad_test.input(flags: flags)
     |> rad_test.run(task)
 
-  assert Ok(rad) =
+  let assert Ok(rad) =
     []
     |> rad_test.input(flags: flags)
     |> rad_test.run(task)
@@ -225,7 +214,7 @@ pub fn version_test() {
   |> string.contains(contain: bare)
   |> should.equal(True)
 
-  assert Ok(stdlib) =
+  let assert Ok(stdlib) =
     ["gleam_stdlib"]
     |> rad_test.input(flags: flags)
     |> rad_test.run(task)

@@ -6,22 +6,15 @@ const listen = (
   serverPort = options.port,
   serverHost = options.host,
 ) => {
-  server.listen(
-    serverPort,
-    serverHost,
-    () => {
-      const currentPort = server.address().port;
-      const currentHost = server.address().address;
+  server.listen(serverPort, serverHost, () => {
+    const currentPort = server.address().port;
+    const currentHost = server.address().address;
 
-      logMessage(currentPort, currentHost);
-    },
-  ).once(
-    "error",
-    () => {
-      server.removeAllListeners("listening");
-      listen(server, 0);
-    },
-  );
+    logMessage(currentPort, currentHost);
+  }).once("error", () => {
+    server.removeAllListeners("listening");
+    listen(server, 0);
+  });
 };
 
 export default listen;

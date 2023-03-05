@@ -124,7 +124,7 @@ pub fn to_tasks(workbook: Workbook) -> Tasks {
 ///
 pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
   fn(input: CommandInput, task: Task(Result)) {
-    assert Parsed(config) = task.config
+    let assert Parsed(config) = task.config
 
     let path = case task.path {
       ["help"] -> input.args
@@ -136,10 +136,11 @@ pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
       |> result.values
       |> tasks(into: workbook_fun())
 
-    try task =
+    use task <- result.then(
       workbook
       |> map.get(path)
-      |> result.replace_error(snag.new("rad task not found"))
+      |> result.replace_error(snag.new("rad task not found")),
+    )
 
     // Get subtasks
     let tasks =
@@ -176,7 +177,7 @@ pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
     let has_parameters = task.parameters != []
     let has_tasks = tasks != []
 
-    try info = info(config)
+    use info <- result.then(info(config))
     let info = Some(info)
 
     let description = case task.shortdoc {
@@ -308,15 +309,16 @@ pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
 ///
 pub fn info(config: Toml) -> Result {
   // Check if `rad` is the base project or a dependency
-  try project_name =
+  use project_name <- result.then(
     ["name"]
-    |> toml.decode(from: config, expect: dynamic.string)
-  try config = case project_name {
+    |> toml.decode(from: config, expect: dynamic.string),
+  )
+  use config <- result.then(case project_name {
     "rad" -> Ok(config)
     _else ->
       "build/packages/rad/gleam.toml"
       |> toml.parse_file
-  }
+  })
 
   let name =
     "rad"

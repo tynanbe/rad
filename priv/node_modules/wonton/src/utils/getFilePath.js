@@ -1,6 +1,6 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { options } from "../index.js";
-import fs from "fs";
-import path from "path";
 
 export const getFilePath = (pathname) => {
   const { root, fallback } = options;
