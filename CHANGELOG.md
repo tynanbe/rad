@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.2.0 - 2023-03-05
 
 - Rad now requires Gleam v0.27 or later.
 - Rad now supports the Deno JavaScript runtime (v1.30 or later).
