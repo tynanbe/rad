@@ -196,7 +196,7 @@ You can extend `rad` with your project's `gleam.toml` configuration file.
 
 ```toml
 [rad]
-workbook = "workbook"
+workbook = "my/workbook"
 targets = ["erlang", "javascript"]
 with = "javascript"
 
@@ -270,7 +270,7 @@ dependent projects!
 ### Examples
 
 ```gleam
-// src/workbook.gleam
+// src/my/workbook.gleam
 
 import gleam/dynamic
 import gleam/json
