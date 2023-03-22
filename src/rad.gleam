@@ -42,12 +42,11 @@ pub fn main() -> Nil {
       do: fn(input) {
         let assert Ok(flag.S(with)) =
           "with"
-          |> flag.get_value(from: input.flags)
+          |> flag.get(from: input.flags)
         with
       },
       with: [flag.string(called: "with", default: with, explained: "")],
       described: "",
-      used: "",
     )
     |> glint.execute(arguments(Global))
 
@@ -97,9 +96,6 @@ pub fn do_main(workbook: Workbook) -> Nil {
         do: task.run(_, task),
         with: task.flags,
         described: task.shortdoc,
-        used: ["rad", ..task.path]
-        |> string.join(with: " ")
-        |> string.append(suffix: " <SUBCOMMAND> <FLAGS>"),
       )
     },
   )

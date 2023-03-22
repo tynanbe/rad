@@ -302,7 +302,7 @@ pub fn or(
   let cond = fn(input: CommandInput) {
     let assert Ok(flag.B(flag_value)) =
       flag_name
-      |> flag.get_value(from: input.flags)
+      |> flag.get(from: input.flags)
     case flag_value {
       True -> true_fun()
       False -> false_fun()
@@ -395,7 +395,7 @@ pub fn formatters() -> Iterable(a) {
     let io_println = util.quiet_or_println(input)
     let assert Ok(flag.B(check)) =
       "check"
-      |> flag.get_value(from: input.flags)
+      |> flag.get(from: input.flags)
     let result =
       formatters
       |> list.at(get: index)
@@ -501,7 +501,7 @@ pub fn targets() -> Iterable(a) {
   let items_fun = fn(input: CommandInput, _task) {
     let assert Ok(flag.LS(targets)) =
       "target"
-      |> flag.get_value(from: input.flags)
+      |> flag.get(from: input.flags)
     targets
     |> list.unique
   }

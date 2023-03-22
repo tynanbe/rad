@@ -386,7 +386,7 @@ pub fn workbook() -> Workbook {
 pub fn root(input: CommandInput, task: Task(Result)) -> Result {
   let assert Ok(flag.B(ver)) =
     "version"
-    |> flag.get_value(from: input.flags)
+    |> flag.get(from: input.flags)
   case ver {
     True -> {
       let flags =
@@ -427,7 +427,7 @@ pub fn config(input: CommandInput, task: Task(Result)) -> Result {
 pub fn docs_build(input: CommandInput, task: Task(Result)) -> Result {
   let assert Ok(flag.B(all)) =
     "all"
-    |> flag.get_value(from: input.flags)
+    |> flag.get(from: input.flags)
 
   use #(name, is_self) <- result.then(self_or_dependency(
     input,
@@ -541,7 +541,7 @@ pub fn docs_serve(input: CommandInput, _task: Task(Result)) -> Result {
 
   let assert Ok(flag.S(host)) =
     "host"
-    |> flag.get_value(from: input.flags)
+    |> flag.get(from: input.flags)
   let assert Ok(flags) = case host {
     "localhost" ->
       "--host=127.0.0.1"
@@ -597,7 +597,7 @@ pub fn docs_serve(input: CommandInput, _task: Task(Result)) -> Result {
 pub fn format(input: CommandInput, task: Task(Result)) -> Result {
   let assert Ok(flag.B(fail)) =
     "fail"
-    |> flag.get_value(from: input.flags)
+    |> flag.get(from: input.flags)
   use _result <- result.then(case fail {
     True -> snag.error("invalid formatter in `gleam.toml`")
     False -> Ok("")
@@ -610,7 +610,7 @@ pub fn format(input: CommandInput, task: Task(Result)) -> Result {
     |> result.map_error(with: fn(_snag) {
       let assert Ok(flag.B(check)) =
         "check"
-        |> flag.get_value(from: input.flags)
+        |> flag.get(from: input.flags)
       case check {
         True -> "failed format check"
         False -> "failed formatting"
@@ -622,7 +622,7 @@ pub fn format(input: CommandInput, task: Task(Result)) -> Result {
   let [command, ..] = input.args
   let assert Ok(flag.B(check)) =
     "check"
-    |> flag.get_value(from: input.flags)
+    |> flag.get(from: input.flags)
   let action = case check {
     True -> "Checked"
     False -> "Formatted"
@@ -917,7 +917,7 @@ pub fn test(input: CommandInput, task: Task(Result)) -> Result {
   let options = [LetBeStderr, LetBeStdout]
   let assert Ok(flag.LS([target])) =
     "target"
-    |> flag.get_value(from: input.flags)
+    |> flag.get(from: input.flags)
 
   let build = fn(target) {
     shellout.command(
@@ -1025,7 +1025,7 @@ pub fn tree(_input: CommandInput, _task: Task(Result)) -> Result {
 pub fn version(input: CommandInput, task: Task(Result)) -> Result {
   let assert Ok(flag.B(bare)) =
     "bare"
-    |> flag.get_value(from: input.flags)
+    |> flag.get(from: input.flags)
 
   use name <- result.then(case bare {
     True -> Ok(None)
@@ -1221,10 +1221,10 @@ if javascript {
 pub fn watch_do(input: CommandInput, _task: Task(Result)) -> Result {
   let assert Ok(flag.B(no_docs)) =
     "no-docs"
-    |> flag.get_value(from: input.flags)
+    |> flag.get(from: input.flags)
   let assert Ok(flag.I(port)) =
     "port"
-    |> flag.get_value(from: input.flags)
+    |> flag.get(from: input.flags)
   let assert Ok(target_flag) =
     "target"
     |> map.get(input.flags, _)

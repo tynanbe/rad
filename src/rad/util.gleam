@@ -522,7 +522,7 @@ pub fn quiet_or_spawn(input: CommandInput) -> List(CommandOpt) {
 fn is_test(input: CommandInput) -> Bool {
   let result =
     test_flag
-    |> flag.get_value(from: input.flags)
+    |> flag.get(from: input.flags)
   case result {
     Ok(flag.B(test)) -> test
     _else -> False

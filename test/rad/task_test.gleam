@@ -217,7 +217,7 @@ pub fn targets_test() {
 
   let assert Ok(flag.LS(targets)) =
     "target"
-    |> flag.get_value(from: input.flags)
+    |> flag.get(from: input.flags)
 
   let assert Each(get: items_fun, map: mapper) = builder.for
 
@@ -229,7 +229,7 @@ pub fn targets_test() {
 
   let assert Ok(flag.LS(target)) =
     "target"
-    |> flag.get_value(from: item.flags)
+    |> flag.get(from: item.flags)
 
   target
   |> should.equal(["erlang"])
