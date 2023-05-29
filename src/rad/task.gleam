@@ -743,7 +743,7 @@ pub fn tasks_from_config() -> List(gleam.Result(Task(Result), Snag)) {
   )
   |> result.unwrap(or: [])
   |> list.map(with: fn(toml) {
-    use task <- result.then(
+    use task <- result.try(
       []
       |> toml.decode(from: toml, expect: requirements),
     )

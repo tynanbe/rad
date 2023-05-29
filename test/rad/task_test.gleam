@@ -401,7 +401,7 @@ pub fn trainer_test() {
           |> string.join(with: " ")
           |> snag.new
           |> function.constant
-        use maybe_oddish <- result.then(
+        use maybe_oddish <- result.try(
           arg
           |> int.parse
           |> result.map_error(with: not_oddish),

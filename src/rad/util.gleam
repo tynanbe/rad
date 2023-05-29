@@ -57,7 +57,7 @@ pub fn erlang_run(
 ) -> Result(String, Snag) {
   ebin_paths()
   |> result.replace_error(snag.new("failed to find `ebin` paths"))
-  |> result.then(apply: fn(ebins) {
+  |> result.try(apply: fn(ebins) {
     [["-pa", ..ebins], args]
     |> list.flatten
     |> shellout.command(run: "erl", in: ".", opt: options)
@@ -155,8 +155,9 @@ pub fn file_exists(path: String) -> Bool {
 
 if erlang {
   fn do_file_exists(path: String) -> Bool {
-    // TODO when gleam_erlang changes: file.exists(path)
-    file.is_file(path)
+    path
+    |> file.file_exists
+    |> result.unwrap(or: False)
   }
 }
 
@@ -204,7 +205,9 @@ pub fn is_directory(path: String) -> Bool {
 
 if erlang {
   fn do_is_directory(path: String) -> Bool {
-    file.is_directory(path)
+    path
+    |> file.is_directory
+    |> result.unwrap(or: False)
   }
 }
 

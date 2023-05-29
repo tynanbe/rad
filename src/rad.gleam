@@ -178,7 +178,7 @@ fn rad_run(package: String, with: String, fun: fn() -> Nil) -> Nil {
 
     _else_if, "erlang" ->
       {
-        use _output <- result.then(case
+        use _output <- result.try(case
           util.file_exists("./build/dev/erlang/rad/ebin/rad.app")
         {
           True -> Ok("")
@@ -257,7 +257,7 @@ if erlang {
         let result = gleam_build("erlang")
         io.println("")
         result
-        |> result.then(apply: fn(_result) { maybe_run(package, module) })
+        |> result.try(apply: fn(_result) { maybe_run(package, module) })
       })
       |> result.map_error(with: fn(snag) {
         let _nil =

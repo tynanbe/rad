@@ -429,7 +429,7 @@ pub fn docs_build(input: CommandInput, task: Task(Result)) -> Result {
     "all"
     |> flag.get(from: input.flags)
 
-  use #(name, is_self) <- result.then(self_or_dependency(
+  use #(name, is_self) <- result.try(self_or_dependency(
     input,
     task,
     self: fn(self, _config) { Ok(self) },
@@ -467,19 +467,19 @@ pub fn docs_build(input: CommandInput, task: Task(Result)) -> Result {
         opt: [LetBeStderr, LetBeStdout],
       )
       |> result.replace_error(snag.new("failed building docs"))
-      |> result.then(apply: fn(_output) {
+      |> result.try(apply: fn(_output) {
         case is_self {
           True -> Ok("")
           False -> {
             let docs_dir = "./build/dev/docs/"
-            use _result <- result.then(case util.is_directory(docs_dir) {
+            use _result <- result.try(case util.is_directory(docs_dir) {
               True -> Ok("")
               False -> util.make_directory(docs_dir)
             })
             let new_path =
               [docs_dir, name]
               |> string.concat
-            use _result <- result.then(
+            use _result <- result.try(
               new_path
               |> util.recursive_delete,
             )
@@ -532,7 +532,7 @@ pub fn docs_serve(input: CommandInput, _task: Task(Result)) -> Result {
   let assert Ok(docs_build_task) =
     ["docs", "build"]
     |> workbook.get(from: workbook())
-  use _output <- result.then(
+  use _output <- result.try(
     input
     |> docs_build_task.run(docs_build_task),
   )
@@ -598,12 +598,12 @@ pub fn format(input: CommandInput, task: Task(Result)) -> Result {
   let assert Ok(flag.B(fail)) =
     "fail"
     |> flag.get(from: input.flags)
-  use _result <- result.then(case fail {
+  use _result <- result.try(case fail {
     True -> snag.error("invalid formatter in `gleam.toml`")
     False -> Ok("")
   })
 
-  use result <- result.then(
+  use result <- result.try(
     map.new()
     |> CommandInput(args: [])
     |> task.basic(input.args)(task)
@@ -649,7 +649,7 @@ pub fn format(input: CommandInput, task: Task(Result)) -> Result {
 /// Can be useful as a building block in other [`Runner`](../task.html#Runner)s.
 ///
 pub fn name(input: CommandInput, task: Task(Result)) -> Result {
-  use #(name, _is_self) <- result.then(self_or_dependency(
+  use #(name, _is_self) <- result.try(self_or_dependency(
     input,
     task,
     self: fn(self, _config) { Ok(self) },
@@ -699,11 +699,11 @@ pub fn origin(_input: CommandInput, _task: Task(Result)) -> Result {
 /// to succeed.
 ///
 pub fn ping(input: CommandInput, _task: Task(Result)) -> Result {
-  use uri_string <- result.then(case input.args {
+  use uri_string <- result.try(case input.args {
     [uri_string, ..] -> Ok(uri_string)
     _else -> snag.error("URI not provided")
   })
-  use uri <- result.then(
+  use uri <- result.try(
     uri_string
     |> uri.parse
     |> result.map_error(with: fn(_nil) {
@@ -730,13 +730,13 @@ if erlang {
     uri_string: String,
     headers: List(Header),
   ) -> gleam.Result(Int, Int) {
-    use uri <- result.then(
+    use uri <- result.try(
       uri_string
       |> uri.parse
       |> result.replace_error(400),
     )
 
-    use request <- result.then(
+    use request <- result.try(
       uri
       |> request.from_uri
       |> result.replace_error(400),
@@ -772,7 +772,7 @@ if javascript {
         ".then(console.log)",
       ]
       |> string.concat
-    use status <- result.then(
+    use status <- result.try(
       util.javascript_run(
         deno: ["eval", script, "--unstable"],
         or: ["--eval=" <> script],
@@ -852,11 +852,11 @@ if javascript {
     case runtime {
       "elixir" | "iex" -> {
         let assert Parsed(config) = task.config
-        use name <- result.then(
+        use name <- result.try(
           ["name"]
           |> toml.decode(from: config, expect: dynamic.string),
         )
-        use ebins <- result.then(
+        use ebins <- result.try(
           util.ebin_paths()
           |> result.replace_error(snag.new("failed to find `ebin` paths")),
         )
@@ -930,21 +930,21 @@ pub fn test(input: CommandInput, task: Task(Result)) -> Result {
   }
 
   let assert Parsed(config) = task.config
-  use name <- result.then(
+  use name <- result.try(
     ["name"]
     |> toml.decode(from: config, expect: dynamic.string),
   )
 
   case target {
     "erlang" -> {
-      use _result <- result.then(build(target))
+      use _result <- result.try(build(target))
       ["-noshell", "-eval", name <> "@@main:run(" <> name <> "_test)"]
       |> util.erlang_run(opt: options)
       |> result.replace_error(snag.new("`erlang` tests failed"))
     }
 
     "javascript" -> {
-      use _result <- result.then(build(target))
+      use _result <- result.try(build(target))
       let script =
         "import('./build/dev/javascript/" <> name <> "/" <> name <> "_test.mjs').then(module => module.main())"
       util.javascript_run(
@@ -1027,7 +1027,7 @@ pub fn version(input: CommandInput, task: Task(Result)) -> Result {
     "bare"
     |> flag.get(from: input.flags)
 
-  use name <- result.then(case bare {
+  use name <- result.try(case bare {
     True -> Ok(None)
     False ->
       input
@@ -1035,7 +1035,7 @@ pub fn version(input: CommandInput, task: Task(Result)) -> Result {
       |> result.map(with: Some)
   })
 
-  use #(version, _is_self) <- result.then(self_or_dependency(
+  use #(version, _is_self) <- result.try(self_or_dependency(
     input,
     task,
     self: fn(_self, config) {
@@ -1052,7 +1052,7 @@ pub fn version(input: CommandInput, task: Task(Result)) -> Result {
       |> result.unwrap(or: [])
       |> list.find_map(with: fn(toml) {
         let decode = toml.decode(_, from: toml, expect: dynamic.string)
-        use name <- result.then(decode(["name"]))
+        use name <- result.try(decode(["name"]))
         case [name] == input.args {
           True -> decode(["version"])
           False -> snag.error("")
@@ -1362,7 +1362,7 @@ fn dependency_name(path: List(String), from config: Toml) {
     [which_deps, name]
     |> toml.decode(from: config, expect: dynamic.string)
   }
-  use _version <- result.then(
+  use _version <- result.try(
     "dependencies"
     |> is_dep
     |> result.lazy_or(fn() { is_dep("dev-dependencies") })
@@ -1383,7 +1383,7 @@ fn self_or_dependency(
 ) -> gleam.Result(#(String, Bool), Snag) {
   let assert Parsed(config) = task.config
 
-  use self <- result.then(
+  use self <- result.try(
     ["name"]
     |> toml.decode(from: config, expect: dynamic.string),
   )

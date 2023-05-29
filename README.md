@@ -336,14 +336,14 @@ pub fn commit(_input: CommandInput, _task: Task(Result)) -> Result {
       );
     "
 
-  use output <- result.then(
+  use output <- result.try(
     ["--eval", script]
     |> util.javascript_run(opt: []),
   )
 
   let snag = snag.new("service unreachable")
 
-  use status <- result.then(
+  use status <- result.try(
     output
     |> json.decode(using: dynamic.field(named: "status", of: dynamic.int))
     |> result.replace_error(snag),

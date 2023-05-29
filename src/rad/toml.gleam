@@ -29,7 +29,7 @@ pub fn decode(
   get key_path: List(String),
   expect decoder: Decoder(a),
 ) -> Result(a, Snag) {
-  use item <- result.then(
+  use item <- result.try(
     toml
     |> do_toml_get(key_path)
     |> result.map_error(with: fn(_nil) {
@@ -73,7 +73,7 @@ if erlang {
     key_path: List(String),
     decoder: Decoder(a),
   ) -> Result(List(#(String, a)), Snag) {
-    use map <- result.then(
+    use map <- result.try(
       key_path
       |> decode(
         from: toml,
@@ -166,7 +166,7 @@ pub fn parse_file(path: String) -> Result(Toml, Snag) {
     |> string.concat
     |> snag.new
   })
-  |> result.then(apply: fn(parsed) {
+  |> result.try(apply: fn(parsed) {
     parsed
     |> from_dynamic
     |> result.map_error(with: fn(_decode_errors) {

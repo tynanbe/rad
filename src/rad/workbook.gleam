@@ -136,7 +136,7 @@ pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
       |> result.values
       |> tasks(into: workbook_fun())
 
-    use task <- result.then(
+    use task <- result.try(
       workbook
       |> map.get(path)
       |> result.replace_error(snag.new("rad task not found")),
@@ -177,7 +177,7 @@ pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
     let has_parameters = task.parameters != []
     let has_tasks = tasks != []
 
-    use info <- result.then(info(config))
+    use info <- result.try(info(config))
     let info = Some(info)
 
     let description = case task.shortdoc {
@@ -309,11 +309,11 @@ pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
 ///
 pub fn info(config: Toml) -> Result {
   // Check if `rad` is the base project or a dependency
-  use project_name <- result.then(
+  use project_name <- result.try(
     ["name"]
     |> toml.decode(from: config, expect: dynamic.string),
   )
-  use config <- result.then(case project_name {
+  use config <- result.try(case project_name {
     "rad" -> Ok(config)
     _else ->
       "build/packages/rad/gleam.toml"
