@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.3.0 - 2023-05-29
 
 - Rad now requires Gleam v0.29 or later.
 - Rad now supports `gleam_erlang` v0.19.
