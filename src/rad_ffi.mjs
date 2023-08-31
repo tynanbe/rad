@@ -20,6 +20,11 @@ const LetBeStdout = new shellout.LetBeStdout();
 const prefix = "./build/dev/javascript";
 const default_workbook = "../rad/rad/workbook/standard.mjs";
 
+export function start_arguments() {
+  let args = shellout.arguments$();
+  return (args.isEmpty() || globalThis.Deno) ? args : args.tail;
+}
+
 export function ebin_paths() {
   let prefix = "./build/dev/erlang";
   try {
@@ -263,4 +268,12 @@ export function working_directory() {
   } catch {
     return new GleamError(Nil);
   }
+}
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+// Miscellaneous Functions               //
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
+
+export function no_fun() {
+  throw Error("Unsupported target");
 }

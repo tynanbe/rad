@@ -1,5 +1,8 @@
 $self = "rad"
-$module = "./build/dev/javascript/${self}/${self}.mjs"
+$build_dir = "./build/dev/javascript/${self}"
+$main_module = "${build_dir}/${self}.mjs"
+$run = "gleam.main"
+$run_module = "${build_dir}/${run}.mjs"
 
 function Fail {
   param($message)
@@ -36,28 +39,34 @@ if ("${snag}" -ne "") {
 #
 # Redirect stdout to stderr, keeping stdout clear for the given task.
 #
-if (-not (Test-Path -Type Leaf "${module}")) {
+if (-not (Test-Path -Type Leaf "${main_module}")) {
   gleam build --target=javascript | Out-Host
   if ($LastExitCode -ne 0) {
     Exit 1
   }
 }
-if (-not (Test-Path -Type Leaf "${module}")) {
-  Fail "error: ``${module}`` not found; try ``gleam add --dev ${self}``"
+if (-not (Test-Path -Type Leaf "${main_module}")) {
+  Fail "error: ``${main_module}`` not found; try ``gleam add --dev ${self}``"
+}
+if (-not (Test-Path -Type Leaf "${run_module}")) {
+  Copy-Item -Path "./priv/${run}.mjs" -Destination "${run_module}"
+  if ($LastExitCode -ne 0) {
+    Exit 1
+  }
 }
 
-$script = "import('${module}').then(module => module.main())"
 if ("${runtime}" -eq "deno") {
-  & deno `
-    eval "${script}" `
+  & deno run `
+    --allow-all `
     --unstable `
-    -- @Args
+    "${run_module}" `
+    @Args
 } else {
   & node `
     --experimental-fetch `
     --experimental-repl-await `
     --no-warnings `
     --title="${self}" `
-    --eval="${script}" `
-    -- @Args
+    "${run_module}" `
+    @Args
 }

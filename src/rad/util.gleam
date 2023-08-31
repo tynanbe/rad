@@ -16,10 +16,8 @@ import glint/flag
 import rad/toml
 import shellout.{CommandOpt, LetBeStderr, LetBeStdout, Lookups}
 import snag.{Snag}
-
-if erlang {
-  import gleam/erlang/file.{Enoent}
-}
+@target(erlang)
+import rad/internal/file.{Enoent}
 
 /// Custom color [`Lookups`](https://hexdocs.pm/shellout/shellout.html#Lookups)
 /// for `rad`.
@@ -59,7 +57,7 @@ pub fn erlang_run(
   |> result.replace_error(snag.new("failed to find `ebin` paths"))
   |> result.try(apply: fn(ebins) {
     [["-pa", ..ebins], args]
-    |> list.flatten
+    |> list.concat
     |> shellout.command(run: "erl", in: ".", opt: options)
     |> result.replace_error(snag.new("failed to run `erl`"))
   })
@@ -72,23 +70,21 @@ pub fn ebin_paths() -> Result(List(String), Nil) {
   do_ebin_paths()
 }
 
-if erlang {
-  fn do_ebin_paths() -> Result(List(String), Nil) {
-    let prefix = "./build/dev/erlang"
-    prefix
-    |> file.list_directory
-    |> result.map(with: list.map(_, with: fn(subdirectory) {
-      [prefix, subdirectory, "ebin"]
-      |> string.join(with: "/")
-    }))
-    |> result.nil_error
-  }
+@target(erlang)
+fn do_ebin_paths() -> Result(List(String), Nil) {
+  let prefix = "./build/dev/erlang"
+  prefix
+  |> file.list_directory
+  |> result.map(with: list.map(_, with: fn(subdirectory) {
+    [prefix, subdirectory, "ebin"]
+    |> string.join(with: "/")
+  }))
+  |> result.nil_error
 }
 
-if javascript {
-  external fn do_ebin_paths() -> Result(List(String), Nil) =
-    "../rad_ffi.mjs" "ebin_paths"
-}
+@target(javascript)
+@external(javascript, "../rad_ffi.mjs", "ebin_paths")
+fn do_ebin_paths() -> Result(List(String), Nil)
 
 /// Runs Deno or Node.js (depending on the JavaScript runtime specified in your
 /// project's `gleam.toml` config) with the given arguments and shellout
@@ -153,18 +149,16 @@ pub fn file_exists(path: String) -> Bool {
   do_file_exists(path)
 }
 
-if erlang {
-  fn do_file_exists(path: String) -> Bool {
-    path
-    |> file.file_exists
-    |> result.unwrap(or: False)
-  }
+@target(erlang)
+fn do_file_exists(path: String) -> Bool {
+  path
+  |> file.file_exists
+  |> result.unwrap(or: False)
 }
 
-if javascript {
-  external fn do_file_exists(String) -> Bool =
-    "../rad_ffi.mjs" "file_exists"
-}
+@target(javascript)
+@external(javascript, "../rad_ffi.mjs", "file_exists")
+fn do_file_exists(path: String) -> Bool
 
 /// Tries to write some `contents` to a file at the given `path`.
 ///
@@ -185,16 +179,14 @@ pub fn file_write(
   })
 }
 
-if erlang {
-  fn do_file_write(contents: String, path: String) -> Result(Nil, file.Reason) {
-    file.write(contents: contents, to: path)
-  }
+@target(erlang)
+fn do_file_write(contents: String, path: String) -> Result(Nil, file.Reason) {
+  file.write(contents: contents, to: path)
 }
 
-if javascript {
-  external fn do_file_write(String, String) -> Result(Nil, dynamic.Dynamic) =
-    "../rad_ffi.mjs" "file_write"
-}
+@target(javascript)
+@external(javascript, "../rad_ffi.mjs", "file_write")
+fn do_file_write(contents: String, path: String) -> Result(Nil, dynamic.Dynamic)
 
 /// Returns a boolean indicating whether or not a directory exists at the given
 /// `path`.
@@ -203,18 +195,16 @@ pub fn is_directory(path: String) -> Bool {
   do_is_directory(path)
 }
 
-if erlang {
-  fn do_is_directory(path: String) -> Bool {
-    path
-    |> file.is_directory
-    |> result.unwrap(or: False)
-  }
+@target(erlang)
+fn do_is_directory(path: String) -> Bool {
+  path
+  |> file.is_directory
+  |> result.unwrap(or: False)
 }
 
-if javascript {
-  external fn do_is_directory(String) -> Bool =
-    "../rad_ffi.mjs" "is_directory"
-}
+@target(javascript)
+@external(javascript, "../rad_ffi.mjs", "is_directory")
+fn do_is_directory(path: String) -> Bool
 
 /// Tries to create a new directory at the given `path`.
 ///
@@ -234,16 +224,14 @@ pub fn make_directory(path: String) -> Result(String, Snag) {
   })
 }
 
-if erlang {
-  fn do_make_directory(path: String) -> Result(Nil, file.Reason) {
-    file.make_directory(path)
-  }
+@target(erlang)
+fn do_make_directory(path: String) -> Result(Nil, file.Reason) {
+  file.make_directory(path)
 }
 
-if javascript {
-  external fn do_make_directory(String) -> Result(Nil, String) =
-    "../rad_ffi.mjs" "make_directory"
-}
+@target(javascript)
+@external(javascript, "../rad_ffi.mjs", "make_directory")
+fn do_make_directory(path: String) -> Result(Nil, String)
 
 /// Tries to recursively delete the given `path`.
 ///
@@ -264,19 +252,17 @@ pub fn recursive_delete(path: String) -> Result(String, Snag) {
   })
 }
 
-if erlang {
-  fn do_recursive_delete(path: String) -> Result(Nil, file.Reason) {
-    case file.recursive_delete(path) {
-      Error(Enoent) -> Ok(Nil)
-      result -> result
-    }
+@target(erlang)
+fn do_recursive_delete(path: String) -> Result(Nil, file.Reason) {
+  case file.recursive_delete(path) {
+    Error(Enoent) -> Ok(Nil)
+    result -> result
   }
 }
 
-if javascript {
-  external fn do_recursive_delete(String) -> Result(Nil, String) =
-    "../rad_ffi.mjs" "recursive_delete"
-}
+@target(javascript)
+@external(javascript, "../rad_ffi.mjs", "recursive_delete")
+fn do_recursive_delete(path: String) -> Result(Nil, String)
 
 /// Tries to move a given `source` path to a new location.
 ///
@@ -292,15 +278,13 @@ pub fn rename(from source: String, to dest: String) -> Result(String, Snag) {
   })
 }
 
-if erlang {
-  external fn do_rename(String, String) -> Result(Nil, file.Reason) =
-    "rad_ffi" "rename"
-}
+@target(erlang)
+@external(erlang, "rad_ffi", "rename")
+fn do_rename(from: String, to: String) -> Result(Nil, file.Reason)
 
-if javascript {
-  external fn do_rename(String, String) -> Result(Nil, String) =
-    "../rad_ffi.mjs" "rename"
-}
+@target(javascript)
+@external(javascript, "../rad_ffi.mjs", "rename")
+fn do_rename(from: String, to: String) -> Result(Nil, String)
 
 /// Results in the current working directory path on success, or a
 /// [`Snag`](https://hexdocs.pm/snag/snag.html#Snag) on failure.
@@ -310,15 +294,13 @@ pub fn working_directory() -> Result(String, Snag) {
   |> result.replace_error(snag.new("failed to get current working directory"))
 }
 
-if erlang {
-  external fn do_working_directory() -> Result(String, file.Reason) =
-    "rad_ffi" "working_directory"
-}
+@target(erlang)
+@external(erlang, "rad_ffi", "working_directory")
+fn do_working_directory() -> Result(String, file.Reason)
 
-if javascript {
-  external fn do_working_directory() -> Result(String, Nil) =
-    "../rad_ffi.mjs" "working_directory"
-}
+@target(javascript)
+@external(javascript, "../rad_ffi.mjs", "working_directory")
+fn do_working_directory() -> Result(String, Nil)
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 // Miscellaneous Functions                //
@@ -330,15 +312,9 @@ pub fn encode_json(data: a) -> String {
   do_encode_json(data)
 }
 
-if erlang {
-  external fn do_encode_json(a) -> String =
-    "rad_ffi" "encode_json"
-}
-
-if javascript {
-  external fn do_encode_json(a) -> String =
-    "../rad_ffi.mjs" "encode_json"
-}
+@external(erlang, "rad_ffi", "encode_json")
+@external(javascript, "../rad_ffi.mjs", "encode_json")
+fn do_encode_json(data: a) -> String
 
 /// Turns a [`Snag`](https://hexdocs.pm/snag/snag.html#Snag) into a multiline
 /// string optimized for readability.

@@ -38,15 +38,12 @@ import rad/util
 import rad/workbook.{Workbook}
 import shellout.{LetBeStderr, LetBeStdout, StyleFlags}
 import snag.{Snag}
-
-if erlang {
-  import gleam/http/request
-  import gleam/httpc
-}
-
-if javascript {
-  import gleam/json
-}
+@target(erlang)
+import gleam/http/request
+@target(erlang)
+import rad/internal/httpc
+@target(javascript)
+import gleam/json
 
 /// Directories that are omitted when printing, watching, etc.
 ///
@@ -555,7 +552,7 @@ pub fn docs_serve(input: CommandInput, _task: Task(Result)) -> Result {
       util.relay_flags(flags),
       ["--", "./build/dev/docs"],
     ]
-    |> list.flatten
+    |> list.concat
   util.javascript_run(
     deno: [
       "run",
@@ -725,70 +722,67 @@ pub fn ping(input: CommandInput, _task: Task(Result)) -> Result {
   )
 }
 
-if erlang {
-  fn do_ping(
-    uri_string: String,
-    headers: List(Header),
-  ) -> gleam.Result(Int, Int) {
-    use uri <- result.try(
-      uri_string
-      |> uri.parse
-      |> result.replace_error(400),
-    )
+@target(erlang)
+fn do_ping(uri_string: String, headers: List(Header)) -> gleam.Result(Int, Int) {
+  use uri <- result.try(
+    uri_string
+    |> uri.parse
+    |> result.replace_error(400),
+  )
 
-    use request <- result.try(
-      uri
-      |> request.from_uri
-      |> result.replace_error(400),
-    )
+  use request <- result.try(
+    uri
+    |> request.from_uri
+    |> result.replace_error(400),
+  )
 
-    headers
-    |> list.fold(
-      from: request,
-      with: fn(acc, header) { request.prepend_header(acc, header.0, header.1) },
-    )
-    |> httpc.send
-    |> result.map(with: fn(response) { response.status })
-    |> result.replace_error(503)
-  }
+  use _ <- result.try(
+    httpc.ensure_started()
+    |> result.replace_error(400),
+  )
+
+  headers
+  |> list.fold(
+    from: request,
+    with: fn(acc, header) { request.prepend_header(acc, header.0, header.1) },
+  )
+  |> httpc.send
+  |> result.map(with: fn(response) { response.status })
+  |> result.replace_error(503)
 }
 
-if javascript {
-  fn do_ping(
-    uri_string: String,
-    headers: List(Header),
-  ) -> gleam.Result(Int, Int) {
-    let headers =
-      headers
-      |> list.map(with: fn(header) { #(header.0, json.string(header.1)) })
-      |> json.object
-      |> json.to_string
+@target(javascript)
+fn do_ping(uri_string: String, headers: List(Header)) -> gleam.Result(Int, Int) {
+  let headers =
+    headers
+    |> list.map(with: fn(header) { #(header.0, json.string(header.1)) })
+    |> json.object
+    |> json.to_string
 
-    let script =
-      [
-        "fetch('" <> uri_string <> "', " <> headers <> ")",
-        ".then(response => response.status)",
-        ".catch(() => 503)",
-        ".then(console.log)",
-      ]
-      |> string.concat
-    use status <- result.try(
-      util.javascript_run(
-        deno: ["eval", script, "--unstable"],
-        or: ["--eval=" <> script],
-        opt: [],
-      )
-      |> result.replace_error(503),
+  let script =
+    [
+      "fetch('" <> uri_string <> "', " <> headers <> ")",
+      ".then(response => response.status)",
+      ".catch(() => 503)",
+      ".then(console.log)",
+    ]
+    |> string.concat
+  use status <- result.try(
+    util.javascript_run(
+      deno: ["eval", script, "--unstable"],
+      or: ["--eval=" <> script],
+      opt: [],
     )
+    |> result.replace_error(503),
+  )
 
-    let assert Ok(status) =
-      status
-      |> string.trim
-      |> int.parse
-    case status < 400 {
-      True -> Ok(status)
-      False -> Error(status)
-    }
+  let assert Ok(status) =
+    status
+    |> string.trim
+    |> int.parse
+  case status < 400 {
+    True -> Ok(status)
+    False -> Error(status)
   }
 }
 
@@ -829,73 +823,71 @@ pub fn shell(input: CommandInput, task: Task(Result)) -> Result {
   do_shell(input, task)
 }
 
-if erlang {
-  fn do_shell(_input: CommandInput, _task: Task(Result)) -> Result {
-    util.refuse_erlang()
-  }
+@target(erlang)
+fn do_shell(_input: CommandInput, _task: Task(Result)) -> Result {
+  util.refuse_erlang()
 }
 
-if javascript {
-  fn do_shell(input: CommandInput, task: Task(Result)) -> Result {
-    let options = [LetBeStderr, LetBeStdout]
-    let runtime = case input.args {
-      [runtime, ..] -> runtime
-      _else -> "erlang"
-    }
-    let javascript =
+@target(javascript)
+fn do_shell(input: CommandInput, task: Task(Result)) -> Result {
+  let options = [LetBeStderr, LetBeStdout]
+  let runtime = case input.args {
+    [runtime, ..] -> runtime
+    _else -> "erlang"
+  }
+  let javascript =
+    [
+      "import('" <> util.rad_path <> "/rad_ffi.mjs')",
+      ".then(module => module.load_modules())",
+    ]
+    |> string.concat
+
+  case runtime {
+    "elixir" | "iex" -> {
+      let assert Parsed(config) = task.config
+      use name <- result.try(
+        ["name"]
+        |> toml.decode(from: config, expect: dynamic.string),
+      )
+      use ebins <- result.try(
+        util.ebin_paths()
+        |> result.replace_error(snag.new("failed to find `ebin` paths")),
+      )
       [
-        "import('" <> util.rad_path <> "/rad_ffi.mjs')",
-        ".then(module => module.load_modules())",
+        ["--app", name],
+        [
+          "--erl",
+          ["-pa", ..ebins]
+          |> string.join(with: " "),
+        ],
       ]
-      |> string.concat
-
-    case runtime {
-      "elixir" | "iex" -> {
-        let assert Parsed(config) = task.config
-        use name <- result.try(
-          ["name"]
-          |> toml.decode(from: config, expect: dynamic.string),
-        )
-        use ebins <- result.try(
-          util.ebin_paths()
-          |> result.replace_error(snag.new("failed to find `ebin` paths")),
-        )
-        [
-          ["--app", name],
-          [
-            "--erl",
-            ["-pa", ..ebins]
-            |> string.join(with: " "),
-          ],
-        ]
-        |> list.flatten
-        |> shellout.command(run: "iex", in: ".", opt: options)
-        |> result.replace_error(snag.new("failed to run `elixir` shell"))
-      }
-
-      "erlang" | "erl" ->
-        []
-        |> util.erlang_run(opt: options)
-        |> result.replace_error(snag.new("failed to run `erlang` shell"))
-
-      "deno" ->
-        ["repl", "--eval=" <> javascript, "--allow-all", "--unstable"]
-        |> shellout.command(run: "deno", in: ".", opt: options)
-        |> result.replace_error(snag.new("failed to run `deno` shell"))
-
-      "nodejs" | "node" ->
-        [
-          "--interactive",
-          "--eval=" <> javascript,
-          "--experimental-fetch",
-          "--experimental-repl-await",
-          "--no-warnings",
-        ]
-        |> shellout.command(run: "node", in: ".", opt: options)
-        |> result.replace_error(snag.new("failed to run `nodejs` shell"))
-
-      _else -> snag.error("unsupported runtime `" <> runtime <> "`")
+      |> list.concat
+      |> shellout.command(run: "iex", in: ".", opt: options)
+      |> result.replace_error(snag.new("failed to run `elixir` shell"))
     }
+
+    "erlang" | "erl" ->
+      []
+      |> util.erlang_run(opt: options)
+      |> result.replace_error(snag.new("failed to run `erlang` shell"))
+
+    "deno" ->
+      ["repl", "--eval=" <> javascript, "--allow-all", "--unstable"]
+      |> shellout.command(run: "deno", in: ".", opt: options)
+      |> result.replace_error(snag.new("failed to run `deno` shell"))
+
+    "nodejs" | "node" ->
+      [
+        "--interactive",
+        "--eval=" <> javascript,
+        "--experimental-fetch",
+        "--experimental-repl-await",
+        "--no-warnings",
+      ]
+      |> shellout.command(run: "node", in: ".", opt: options)
+      |> result.replace_error(snag.new("failed to run `nodejs` shell"))
+
+    _else -> snag.error("unsupported runtime `" <> runtime <> "`")
   }
 }
 
@@ -1000,7 +992,7 @@ pub fn tree(_input: CommandInput, _task: Task(Result)) -> Result {
         ["--noreport"],
         [working_directory],
       ]
-      |> list.flatten
+      |> list.concat
       |> shellout.command(run: "tree", in: ".", opt: [])
       |> result.replace_error(snag.layer(error, "command `tree` not found"))
   }
@@ -1110,94 +1102,93 @@ pub fn watch(input: CommandInput, _task: Task(Result)) -> Result {
   do_watch(input)
 }
 
-if erlang {
-  fn do_watch(_input: CommandInput) -> Result {
-    util.refuse_erlang()
-  }
+@target(erlang)
+fn do_watch(_input: CommandInput) -> Result {
+  util.refuse_erlang()
 }
 
-if javascript {
-  fn do_watch(input: CommandInput) -> Result {
-    let options = [LetBeStderr, LetBeStdout]
-    let [command, ..args] as watch_do = case input.args {
-      [] -> {
-        let rad = util.which_rad()
-        let flags = util.relay_flags(input.flags)
-        [rad, "watch", "do", ..flags]
-      }
-      args -> args
+@target(javascript)
+fn do_watch(input: CommandInput) -> Result {
+  let options = [LetBeStderr, LetBeStdout]
+  let [command, ..args] as watch_do = case input.args {
+    [] -> {
+      let rad = util.which_rad()
+      let flags = util.relay_flags(input.flags)
+      [rad, "watch", "do", ..flags]
     }
+    args -> args
+  }
 
+  [
+    " Watching"
+    |> shellout.style(with: shellout.color(["magenta"]), custom: util.lookups),
+    " … "
+    |> shellout.style(with: shellout.color(["cyan"]), custom: util.lookups),
+    "(Ctrl+C to quit)",
+  ]
+  |> string.concat
+  |> io.println
+
+  let result =
     [
-      " Watching"
-      |> shellout.style(with: shellout.color(["magenta"]), custom: util.lookups),
-      " … "
-      |> shellout.style(with: shellout.color(["cyan"]), custom: util.lookups),
-      "(Ctrl+C to quit)",
+      ignore_glob
+      |> string.split(on: "|")
+      |> list.map(with: fn(directory) {
+        ["--ignore=**/", directory, "/**"]
+        |> string.concat
+      }),
+      ["--no-shell"],
+      ["--postpone"],
+      ["--watch-when-idle"],
+      ["--", ..watch_do],
     ]
-    |> string.concat
-    |> io.println
-
-    let result =
-      [
-        ignore_glob
-        |> string.split(on: "|")
-        |> list.map(with: fn(directory) {
-          ["--ignore=**/", directory, "/**"]
-          |> string.concat
-        }),
-        ["--no-shell"],
-        ["--postpone"],
-        ["--watch-when-idle"],
-        ["--", ..watch_do],
-      ]
-      |> list.flatten
-      |> shellout.command(run: "watchexec", in: ".", opt: options)
-      |> result.replace_error(snag.new("command `watchexec` not found"))
-    case result {
-      Ok(_output) -> result
-      Error(error) ->
-        watch_loop(
-          on: fn() {
+    |> list.concat
+    |> shellout.command(run: "watchexec", in: ".", opt: options)
+    |> result.replace_error(snag.new("command `watchexec` not found"))
+  case result {
+    Ok(_output) -> result
+    Error(error) ->
+      watch_loop(
+        on: fn() {
+          [
+            ["--event", "create"],
+            ["--event", "delete"],
+            ["--event", "modify"],
+            ["--event", "move"],
             [
-              ["--event", "create"],
-              ["--event", "delete"],
-              ["--event", "modify"],
-              ["--event", "move"],
-              [
-                "--exclude",
-                ["^[./\\\\]*(", ignore_glob, ")([/\\\\].*)*$"]
-                |> string.concat,
-              ],
-              ["-qq"],
-              ["--recursive"],
-              ["."],
-            ]
-            |> list.flatten
-            |> shellout.command(run: "inotifywait", in: ".", opt: options)
-          },
-          do: fn() {
-            command
-            |> shellout.command(with: args, in: ".", opt: options)
-          },
-        )
-        |> result.replace_error(snag.layer(
-          error,
-          "command `inotifywait` not found",
-        ))
-    }
-    |> result.map_error(with: function.compose(
-      snag.layer(_, "failed to find a known watcher command"),
-      snag.layer(_, "failed to run task"),
-    ))
+              "--exclude",
+              ["^[./\\\\]*(", ignore_glob, ")([/\\\\].*)*$"]
+              |> string.concat,
+            ],
+            ["-qq"],
+            ["--recursive"],
+            ["."],
+          ]
+          |> list.concat
+          |> shellout.command(run: "inotifywait", in: ".", opt: options)
+        },
+        do: fn() {
+          command
+          |> shellout.command(with: args, in: ".", opt: options)
+        },
+      )
+      |> result.replace_error(snag.layer(
+        error,
+        "command `inotifywait` not found",
+      ))
   }
-
-  external fn watch_loop(
-    on: fn() -> gleam.Result(String, #(Int, String)),
-    do: fn() -> gleam.Result(String, #(Int, String)),
-  ) -> gleam.Result(String, Nil) =
-    "../../rad_ffi.mjs" "watch_loop"
+  |> result.map_error(with: function.compose(
+    snag.layer(_, "failed to find a known watcher command"),
+    snag.layer(_, "failed to run task"),
+  ))
 }
+
+@target(javascript)
+@external(javascript, "../../rad_ffi.mjs", "watch_loop")
+fn watch_loop(
+  on watch_fun: fn() -> gleam.Result(String, #(Int, String)),
+  do do_fun: fn() -> gleam.Result(String, #(Int, String)),
+) -> gleam.Result(String, Nil)
 
 /// Runs several `rad` tasks in succession: renders the project's HTML
 /// documentation, signals the documentation server to do a live reload for all

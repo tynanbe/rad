@@ -10,15 +10,14 @@ import gleam/list
 import gleam/result
 import gleam/string
 import snag.{Snag}
-
-if erlang {
-  import gleam/function
-  import gleam/map
-}
+@target(erlang)
+import gleam/function
+@target(erlang)
+import gleam/map
 
 /// A TOML [table](https://toml.io/en/v1.0.0#table) of dynamic data.
 ///
-pub external type Toml
+pub type Toml
 
 /// Results in typed Gleam data decoded from the given [`Toml`](#Toml)'s
 /// `key_path` on success, or a [`Snag`](https://hexdocs.pm/snag/snag.html#Snag)
@@ -43,15 +42,9 @@ pub fn decode(
   |> result.map_error(with: decode_errors_to_snag(_, key_path))
 }
 
-if erlang {
-  external fn do_toml_get(Toml, List(String)) -> Result(Dynamic, Nil) =
-    "rad_ffi" "toml_get"
-}
-
-if javascript {
-  external fn do_toml_get(Toml, List(String)) -> Result(Dynamic, Nil) =
-    "../rad_ffi.mjs" "toml_get"
-}
+@external(erlang, "rad_ffi", "toml_get")
+@external(javascript, "../rad_ffi.mjs", "toml_get")
+fn do_toml_get(toml: Toml, key_path: List(String)) -> Result(Dynamic, Nil)
 
 /// Results in a list of every key-value pair for which the value can be
 /// successfully decoded from the given [`Toml`](#Toml)'s `key_path` using the
@@ -67,58 +60,57 @@ pub fn decode_every(
   do_decode_every(toml, key_path, decoder)
 }
 
-if erlang {
-  fn do_decode_every(
-    toml: Toml,
-    key_path: List(String),
-    decoder: Decoder(a),
-  ) -> Result(List(#(String, a)), Snag) {
-    use map <- result.try(
-      key_path
-      |> decode(
-        from: toml,
-        expect: dynamic.from
-        |> function.compose(dynamic.map(of: dynamic.string, to: dynamic.dynamic)),
-      ),
+@target(erlang)
+fn do_decode_every(
+  toml: Toml,
+  key_path: List(String),
+  decoder: Decoder(a),
+) -> Result(List(#(String, a)), Snag) {
+  use map <- result.try(
+    key_path
+    |> decode(
+      from: toml,
+      expect: dynamic.from
+      |> function.compose(dynamic.map(of: dynamic.string, to: dynamic.dynamic)),
+    ),
+  )
+
+  map
+  |> map.to_list
+  |> list.filter_map(with: fn(tuple) {
+    let key = ""
+    let assert Ok(toml) =
+      [#(key, tuple)]
+      |> map.from_list
+      |> dynamic.from
+      |> from_dynamic
+    [key]
+    |> decode(
+      from: toml,
+      expect: dynamic.tuple2(first: dynamic.string, second: decoder),
     )
-
-    map
-    |> map.to_list
-    |> list.filter_map(with: fn(tuple) {
-      let key = ""
-      let assert Ok(toml) =
-        [#(key, tuple)]
-        |> map.from_list
-        |> dynamic.from
-        |> from_dynamic
-      [key]
-      |> decode(
-        from: toml,
-        expect: dynamic.tuple2(first: dynamic.string, second: decoder),
-      )
-    })
-    |> Ok
-  }
+  })
+  |> Ok
 }
 
-if javascript {
-  fn do_decode_every(
-    toml: Toml,
-    key_path: List(String),
-    decoder: Decoder(a),
-  ) -> Result(List(#(String, a)), Snag) {
-    toml
-    |> javascript_decode_every(key_path, decoder)
-    |> result.map_error(with: decode_errors_to_snag(_, key_path))
-  }
-
-  external fn javascript_decode_every(
-    Toml,
-    List(String),
-    Decoder(a),
-  ) -> Result(List(#(String, a)), DecodeErrors) =
-    "../rad_ffi.mjs" "toml_decode_every"
+@target(javascript)
+fn do_decode_every(
+  toml: Toml,
+  key_path: List(String),
+  decoder: Decoder(a),
+) -> Result(List(#(String, a)), Snag) {
+  toml
+  |> javascript_decode_every(key_path, decoder)
+  |> result.map_error(with: decode_errors_to_snag(_, key_path))
 }
+
+@target(javascript)
+@external(javascript, "../rad_ffi.mjs", "toml_decode_every")
+fn javascript_decode_every(
+  toml: Toml,
+  key_path: List(String),
+  decoder: Decoder(a),
+) -> Result(List(#(String, a)), DecodeErrors)
 
 /// Results in a [`Toml`](#Toml) decoded from the given dynamic `data` on
 /// success, or
@@ -129,15 +121,9 @@ pub fn from_dynamic(data: Dynamic) -> Result(Toml, DecodeErrors) {
   decode_object(data)
 }
 
-if erlang {
-  external fn decode_object(Dynamic) -> Result(Toml, DecodeErrors) =
-    "rad_ffi" "decode_object"
-}
-
-if javascript {
-  external fn decode_object(Dynamic) -> Result(Toml, DecodeErrors) =
-    "../rad_ffi.mjs" "decode_object"
-}
+@external(erlang, "rad_ffi", "decode_object")
+@external(javascript, "../rad_ffi.mjs", "decode_object")
+fn decode_object(data: Dynamic) -> Result(Toml, DecodeErrors)
 
 /// Returns a new, empty [`Toml`](#Toml).
 ///
@@ -145,15 +131,9 @@ pub fn new() -> Toml {
   do_new()
 }
 
-if erlang {
-  external fn do_new() -> Toml =
-    "rad_ffi" "toml_new"
-}
-
-if javascript {
-  external fn do_new() -> Toml =
-    "../rad_ffi.mjs" "toml_new"
-}
+@external(erlang, "rad_ffi", "toml_new")
+@external(javascript, "../rad_ffi.mjs", "toml_new")
+fn do_new() -> Toml
 
 /// Results in a [`Toml`](#Toml) parsed from the given file `path` on success,
 /// or a [`Snag`](https://hexdocs.pm/snag/snag.html#Snag) on failure.
@@ -177,15 +157,9 @@ pub fn parse_file(path: String) -> Result(Toml, Snag) {
   })
 }
 
-if erlang {
-  external fn do_parse_file(String) -> Result(Dynamic, Nil) =
-    "rad_ffi" "toml_read_file"
-}
-
-if javascript {
-  external fn do_parse_file(String) -> Result(Dynamic, Nil) =
-    "../rad_ffi.mjs" "toml_read_file"
-}
+@external(erlang, "rad_ffi", "toml_read_file")
+@external(javascript, "../rad_ffi.mjs", "toml_read_file")
+fn do_parse_file(path: String) -> Result(Dynamic, Nil)
 
 fn decode_errors_to_snag(decode_errors: DecodeErrors, key_path: List(String)) {
   let [head, ..rest] =

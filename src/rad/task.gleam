@@ -477,7 +477,7 @@ pub fn packages() -> Iterable(a) {
     [
       self,
       ..[dependencies, dev_dependencies]
-      |> list.flatten
+      |> list.concat
       |> list.map(with: pair.first)
       |> list.sort(by: string.compare)
     ]
@@ -545,7 +545,7 @@ pub fn basic(command: List(String)) -> Runner(Result) {
   fn(input: CommandInput, _task) {
     let [command, ..args] = command
     [args, util.relay_flags(input.flags), input.args]
-    |> list.flatten
+    |> list.concat
     |> shellout.command(run: command, in: ".", opt: util.quiet_or_spawn(input))
     |> result.replace_error(snag.new("failed running task"))
   }
@@ -560,7 +560,7 @@ pub fn basic(command: List(String)) -> Runner(Result) {
 pub fn gleam(arguments: List(String)) -> Runner(Result) {
   fn(input: CommandInput, _task) {
     [arguments, util.relay_flags(input.flags), input.args]
-    |> list.flatten
+    |> list.concat
     |> shellout.command(run: "gleam", in: ".", opt: util.quiet_or_spawn(input))
     |> result.replace("")
     |> result.replace_error(snag.new("failed running task"))

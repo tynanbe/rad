@@ -118,7 +118,7 @@ type Scope {
 fn arguments(scope: Scope) -> List(String) {
   let filter = string.starts_with(_, "--with=")
   let arguments =
-    shellout.arguments()
+    start_arguments()
     |> list.filter(for: case scope {
       Global -> filter
       Normal ->
@@ -151,6 +151,11 @@ fn arguments(scope: Scope) -> List(String) {
       }
     }
   }
+}
+
+@external(javascript, "./rad_ffi.mjs", "start_arguments")
+fn start_arguments() -> List(String) {
+  shellout.arguments()
 }
 
 fn end_task(result: Result(String, Snag)) -> Nil {
@@ -188,9 +193,9 @@ fn rad_run(package: String, with: String, fun: fn() -> Nil) -> Nil {
         [
           ["-noshell"],
           ["-eval", package <> "@@main:run(rad)"],
-          ["-extra", ..shellout.arguments()],
+          ["-extra", ..start_arguments()],
         ]
-        |> list.flatten
+        |> list.concat
         |> util.erlang_run(opt: [LetBeStderr, LetBeStdout])
       }
       |> end_task
@@ -199,8 +204,8 @@ fn rad_run(package: String, with: String, fun: fn() -> Nil) -> Nil {
       let script =
         "import('./build/dev/javascript/rad/rad.mjs').then(module => module.main())"
       util.javascript_run(
-        deno: ["eval", script, "--unstable", "--", ..shellout.arguments()],
-        or: ["--eval=" <> script, "--title=rad", "--", ..shellout.arguments()],
+        deno: ["eval", script, "--unstable", "--", ..start_arguments()],
+        or: ["--eval=" <> script, "--title=rad", "--", ..start_arguments()],
         opt: [LetBeStderr, LetBeStdout],
       )
       |> end_task
@@ -219,21 +224,19 @@ fn is_running(target: String) -> Bool {
   |> do_is_running
 }
 
-if erlang {
-  fn do_is_running(target: String) -> Bool {
-    case target {
-      "erlang" -> True
-      _else -> False
-    }
+@target(erlang)
+fn do_is_running(target: String) -> Bool {
+  case target {
+    "erlang" -> True
+    _else -> False
   }
 }
 
-if javascript {
-  fn do_is_running(target: String) -> Bool {
-    case target {
-      "javascript" -> True
-      _else -> False
-    }
+@target(javascript)
+fn do_is_running(target: String) -> Bool {
+  case target {
+    "javascript" -> True
+    _else -> False
   }
 }
 
@@ -248,35 +251,35 @@ fn gleam_run(package: String, module: String) -> Nil {
   do_gleam_run(package, module)
 }
 
-if erlang {
-  fn do_gleam_run(package: String, module: String) -> Nil {
-    let _result =
-      package
-      |> maybe_run(module)
-      |> result.lazy_or(fn() {
-        let result = gleam_build("erlang")
-        io.println("")
-        result
-        |> result.try(apply: fn(_result) { maybe_run(package, module) })
-      })
-      |> result.map_error(with: fn(snag) {
-        let _nil =
-          snag
-          |> util.snag_pretty_print
-          |> io.println
-        erlang_gleam_run(package, default_workbook)
-      })
-    Nil
-  }
-
-  external fn maybe_run(String, String) -> Result(String, Snag) =
-    "rad_ffi" "maybe_run"
-
-  external fn erlang_gleam_run(String, String) -> dynamic.Dynamic =
-    "rad_ffi" "gleam_run"
+@target(erlang)
+fn do_gleam_run(package: String, module: String) -> Nil {
+  let _result =
+    package
+    |> maybe_run(module)
+    |> result.lazy_or(fn() {
+      let result = gleam_build("erlang")
+      io.println("")
+      result
+      |> result.try(apply: fn(_result) { maybe_run(package, module) })
+    })
+    |> result.map_error(with: fn(snag) {
+      let _nil =
+        snag
+        |> util.snag_pretty_print
+        |> io.println
+      erlang_gleam_run(package, default_workbook)
+    })
+  Nil
 }
 
-if javascript {
-  external fn do_gleam_run(String, String) -> Nil =
-    "./rad_ffi.mjs" "gleam_run"
-}
+@target(javascript)
+@external(javascript, "./rad_ffi.mjs", "gleam_run")
+fn do_gleam_run(package: String, module: String) -> Nil
+
+@target(erlang)
+@external(erlang, "rad_ffi", "maybe_run")
+fn maybe_run(package: String, module: String) -> Result(String, Snag)
+
+@target(erlang)
+@external(erlang, "rad_ffi", "gleam_run")
+fn erlang_gleam_run(package: String, module: String) -> dynamic.Dynamic

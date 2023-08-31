@@ -3,11 +3,14 @@
 set -e
 
 self="rad"
-module="./build/dev/javascript/${self}/${self}.mjs"
+build_dir="./build/dev/javascript/${self}"
+main_module="${build_dir}/${self}.mjs"
+run="gleam.main"
+run_module="${build_dir}/${run}.mjs"
 
 fail() {
   message="${1}"
-  echo "\033[91m${message}\033[0m" 1>&2
+  printf %b "\033[91m${message}\033[0m\n" >&2
   exit 1
 }
 
@@ -24,7 +27,7 @@ fi
 
 snag=""
 for dependency in "gleam" "${runtime}"; do
-  if ! type "${dependency}" > /dev/null 2>&1; then
+  if ! type "${dependency}" >/dev/null 2>&1; then
     if test -n "${snag}"; then
       snag="${snag}\n"
     fi
@@ -39,25 +42,28 @@ fi
 #
 # Redirect stdout to stderr, keeping stdout clear for the given task.
 #
-if ! test -f "${module}"; then
-  gleam build --target=javascript 1>&2
+if ! test -f "${main_module}"; then
+  gleam build --target=javascript >&2
 fi
-if ! test -f "${module}"; then
-  fail "error: \`${module}\` not found; try \`gleam add --dev ${self}\`"
+if ! test -f "${main_module}"; then
+  fail "error: \`${main_module}\` not found; try \`gleam add --dev ${self}\`"
+fi
+if ! test -f "${run_module}"; then
+  cp "./priv/${run}.mjs" "${run_module}"
 fi
 
-script="import('${module}').then(module => module.main())"
 if test "${runtime}" = "deno"; then
-  exec deno \
-    eval "${script}" \
+  exec deno run \
+    --allow-all \
     --unstable \
-    -- "${@}"
+    "${run_module}" \
+    "${@}"
 else
   exec node \
     --experimental-fetch \
     --experimental-repl-await \
     --no-warnings \
     --title="${self}" \
-    --eval="${script}" \
-    -- "${@}"
+    "${run_module}" \
+    "${@}"
 fi

@@ -2,31 +2,27 @@
 # You typically do not need to edit this file
 
 packages = [
-  { name = "gleam_bitwise", version = "1.2.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleam_bitwise", source = "hex", outer_checksum = "6064699EFBABB1CA392DCB193D0E8B402FB042B4B46857B01E6875E643B57F54" },
-  { name = "gleam_community_ansi", version = "1.1.0", build_tools = ["gleam"], requirements = ["gleam_community_colour", "gleam_bitwise", "gleam_stdlib"], otp_app = "gleam_community_ansi", source = "hex", outer_checksum = "6E4E0CF2B207C1A7FCD3C21AA43514D67BC7004F21F82045CDCCE6C727A14862" },
+  { name = "gleam_bitwise", version = "1.3.0", build_tools = ["gleam"], requirements = [], otp_app = "gleam_bitwise", source = "hex", outer_checksum = "E2A46EE42E5E9110DAD67E0F71E7358CBE54D5EC22C526DD48CBBA3223025792" },
+  { name = "gleam_community_ansi", version = "1.1.0", build_tools = ["gleam"], requirements = ["gleam_stdlib", "gleam_community_colour", "gleam_bitwise"], otp_app = "gleam_community_ansi", source = "hex", outer_checksum = "6E4E0CF2B207C1A7FCD3C21AA43514D67BC7004F21F82045CDCCE6C727A14862" },
   { name = "gleam_community_colour", version = "1.1.0", build_tools = ["gleam"], requirements = ["gleam_stdlib", "gleam_bitwise"], otp_app = "gleam_community_colour", source = "hex", outer_checksum = "D27CE357ECB343929A8CEC3FBA0B499943A47F0EE1F589EE16AFC2DC21C61E5B" },
-  { name = "gleam_erlang", version = "0.19.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleam_erlang", source = "hex", outer_checksum = "720D1E0A0CEBBD51C4AA88501D1D4FBFEF4AA7B3332C994691ED944767A52582" },
-  { name = "gleam_http", version = "3.2.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleam_http", source = "hex", outer_checksum = "D034F5CE0639CD142CBA210B7D5D14236C284B0C5772A043D2E22128594573AE" },
-  { name = "gleam_httpc", version = "2.0.1", build_tools = ["gleam"], requirements = ["gleam_http", "gleam_stdlib"], otp_app = "gleam_httpc", source = "hex", outer_checksum = "4B7DB74F13814DAC8A9F470DF41D3B8335FC9CD9C48BED0B8EFB012F22C1315E" },
-  { name = "gleam_json", version = "0.5.1", build_tools = ["gleam"], requirements = ["gleam_stdlib", "thoas"], otp_app = "gleam_json", source = "hex", outer_checksum = "9A805C1E60FB9CD73AF3034EB464268A6B522D937FCD2DF92BD246F2F4B37930" },
-  { name = "gleam_stdlib", version = "0.29.0", build_tools = ["gleam"], requirements = [], otp_app = "gleam_stdlib", source = "hex", outer_checksum = "DB981FB670AAC6392C0694AF639C49ADF1C2E42664D5F90BBF573102667B8E53" },
-  { name = "gleeunit", version = "0.10.1", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleeunit", source = "hex", outer_checksum = "ECEA2DE4BE6528D36AFE74F42A21CDF99966EC36D7F25DEB34D47DD0F7977BAF" },
-  { name = "glint", version = "0.11.2", build_tools = ["gleam"], requirements = ["gleam_stdlib", "gleam_community_colour", "gleam_community_ansi", "snag"], otp_app = "glint", source = "hex", outer_checksum = "B3B95A640C86B5833033B4B74276C7B1D2AA04634D845B526C56A8BC52F5D15F" },
-  { name = "shellout", version = "1.3.0", build_tools = ["gleam"], requirements = ["gleam_stdlib", "gleam_erlang"], otp_app = "shellout", source = "hex", outer_checksum = "2F0BFBA7E8D18427525EE8611E832D59D72D261FFA533A3C0DD86987383A53A5" },
-  { name = "snag", version = "0.2.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "snag", source = "hex", outer_checksum = "35C63E478782C58236F1050297C2FDF9806A4DD55C6FAF0B6EC5E54BC119342D" },
+  { name = "gleam_http", version = "3.5.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleam_http", source = "hex", outer_checksum = "FAE9AE3EB1CA90C2194615D20FFFD1E28B630E84DACA670B28D959B37BCBB02C" },
+  { name = "gleam_json", version = "0.6.0", build_tools = ["gleam"], requirements = ["thoas", "gleam_stdlib"], otp_app = "gleam_json", source = "hex", outer_checksum = "C6CC5BEECA525117E97D0905013AB3F8836537455645DDDD10FE31A511B195EF" },
+  { name = "gleam_stdlib", version = "0.30.2", build_tools = ["gleam"], requirements = [], otp_app = "gleam_stdlib", source = "hex", outer_checksum = "8D8BF3790AA31176B1E1C0B517DD74C86DA8235CF3389EA02043EE4FD82AE3DC" },
+  { name = "gleeunit", version = "0.11.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleeunit", source = "hex", outer_checksum = "1397E5C4AC4108769EE979939AC39BF7870659C5AFB714630DEEEE16B8272AD5" },
+  { name = "glint", version = "0.11.4", build_tools = ["gleam"], requirements = ["snag", "gleam_stdlib", "gleam_community_ansi", "gleam_community_colour"], otp_app = "glint", source = "hex", outer_checksum = "9508BF037E35F549C51F9F1D2CC4736CEA7F7A49E21CCA9B4540452C7D6CC4C5" },
+  { name = "shellout", version = "1.4.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "shellout", source = "hex", outer_checksum = "995564B69D40146B7A424CA21D32A68D668A882F88BDAD0EFA2C18C7EC412564" },
+  { name = "snag", version = "0.2.1", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "snag", source = "hex", outer_checksum = "8FD70D8FB3728E08AC425283BB509BB0F012BE1AE218424A597CDE001B0EE589" },
   { name = "thoas", version = "0.4.1", build_tools = ["rebar3"], requirements = [], otp_app = "thoas", source = "hex", outer_checksum = "4918D50026C073C4AB1388437132C77A6F6F7C8AC43C60C13758CC0ADCE2134E" },
   { name = "tomerl", version = "0.5.0", build_tools = ["rebar3"], requirements = [], otp_app = "tomerl", source = "hex", outer_checksum = "2A7FB62F9EBF0E75561B39255638BC2B805B437C86FEC538657E7C3B576979FA" },
 ]
 
 [requirements]
-gleam_erlang = "~> 0.19"
-gleam_http = "~> 3.1"
-gleam_httpc = "~> 2.0"
-gleam_json = "~> 0.5"
-gleam_stdlib = "~> 0.29"
-gleeunit = "~> 0.7"
-glint = "~> 0.11.1"
-shellout = "~> 1.3"
-snag = "~> 0.2"
-thoas = "~> 0.3"
-tomerl = "~> 0.5"
+gleam_http = { version = "~> 3.3" }
+gleam_json = { version = "~> 0.6" }
+gleam_stdlib = { version = "~> 0.30" }
+gleeunit = { version = "~> 0.11" }
+glint = { version = "~> 0.11.4" }
+shellout = { version = "~> 1.4" }
+snag = { version = "~> 0.2" }
+thoas = { version = "~> 0.4" }
+tomerl = { version = "~> 0.5" }

@@ -126,11 +126,11 @@ pub fn builder_test() {
   |> should.equal(shortdoc)
 
   [[flag1], flags, [flag4]]
-  |> list.flatten
+  |> list.concat
   |> should.equal(builder.flags)
 
   [[parameter1], parameters, [parameter4]]
-  |> list.flatten
+  |> list.concat
   |> should.equal(builder.parameters)
 
   builder.config
@@ -480,7 +480,7 @@ pub fn trainer_test() {
     })
     |> task.with_manifest
 
-  ["requirements", "gleam_stdlib"]
+  ["requirements", "gleam_stdlib", "version"]
   |> rad_test.input(flags: [])
   |> rad_test.run(builder)
   |> should.be_ok
@@ -523,7 +523,7 @@ pub fn sort_test() {
     |> workbook.to_tasks
     |> list.sized_chunk(into: 3)
     |> list.reverse
-    |> list.flatten
+    |> list.concat
     |> task.sort
 
   head.path

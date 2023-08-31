@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Rad now requires Gleam v0.30 or later.
+- Rad can now be invoked via `gleam run --target=javascript -m rad`
+  (`--target=erlang` is currently unsupported).
+- Rad no longer depends on `gleam_erlang` or `gleam_httpc`.
+
 ## v0.3.0 - 2023-05-29
 
 - Rad now requires Gleam v0.29 or later.

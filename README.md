@@ -77,7 +77,11 @@ resides).
 
 ```shell
 $ ./build/packages/rad/priv/rad <subcommand> [flags]
+$ # or
+$ gleam run --target=javascript --module=rad -- <subcommand> [flags]
 ```
+
+_Note: `gleam run --target=erlang --module=rad ...` is currently unsupported!_
 
 For convenience when invoking `rad`, first perform one of the following
 operations in a manner consistent with your shell of choice. The goal is to get
