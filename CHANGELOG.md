@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.4.0 - 2023-08-31
 
 - Rad now requires Gleam v0.30 or later.
 - Rad can now be invoked via `gleam run --target=javascript -m rad`
