@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.4.1 - 2023-09-09
 
 - Fix an incorrect shell script path.
 
