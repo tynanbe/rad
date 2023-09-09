@@ -49,7 +49,7 @@ if ! test -f "${main_module}"; then
   fail "error: \`${main_module}\` not found; try \`gleam add --dev ${self}\`"
 fi
 if ! test -f "${run_module}"; then
-  cp "./priv/${run}.mjs" "${run_module}"
+  cp "${build_dir}/priv/${run}.mjs" "${run_module}"
 fi
 
 if test "${runtime}" = "deno"; then

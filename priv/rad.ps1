@@ -49,7 +49,7 @@ if (-not (Test-Path -Type Leaf "${main_module}")) {
   Fail "error: ``${main_module}`` not found; try ``gleam add --dev ${self}``"
 }
 if (-not (Test-Path -Type Leaf "${run_module}")) {
-  Copy-Item -Path "./priv/${run}.mjs" -Destination "${run_module}"
+  Copy-Item -Path "${build_dir}/priv/${run}.mjs" -Destination "${run_module}"
   if ($LastExitCode -ne 0) {
     Exit 1
   }
