@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.0.0 - 2023-12-21
 
 - Rad now requires Gleam v0.33 or later.
 - The `else` label in `rad/task.{or}` has been renamed to `otherwise`.

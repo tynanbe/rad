@@ -1,5 +1,5 @@
 name = "rad"
-version = "1.0.0-dev"
+version = "1.0.0"
 description = "A task runner for Gleam projects"
 licences = ["Apache-2.0"]
 target = "javascript"
