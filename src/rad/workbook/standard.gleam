@@ -18,26 +18,26 @@
 ////
 
 import gleam
+import gleam/dict
 import gleam/dynamic
 import gleam/function
-import gleam/http.{Header}
+import gleam/http.{type Header}
 import gleam/int
 import gleam/io
 import gleam/list
-import gleam/map
 import gleam/option.{None, Some}
 import gleam/result
 import gleam/string
 import gleam/uri.{Uri}
-import glint.{CommandInput}
-import glint/flag
+import glint.{type CommandInput, CommandInput}
+import glint/flag.{Flag}
 import rad
-import rad/task.{Parsed, Result, Task}
-import rad/toml.{Toml}
+import rad/task.{type Result, type Task, Parsed}
+import rad/toml.{type Toml}
 import rad/util
-import rad/workbook.{Workbook}
-import shellout.{LetBeStderr, LetBeStdout, StyleFlags}
-import snag.{Snag}
+import rad/workbook.{type Workbook}
+import shellout.{type StyleFlags, LetBeStderr, LetBeStdout}
+import snag.{type Snag}
 @target(erlang)
 import gleam/http/request
 @target(erlang)
@@ -77,20 +77,26 @@ pub fn main() -> Nil {
 ///
 pub fn workbook() -> Workbook {
   let style_flags = [
-    flag.strings(
-      called: "display",
-      default: ["bold"],
-      explained: "Set display styles",
+    #(
+      "display",
+      flag.string_list()
+      |> flag.default(of: ["bold"])
+      |> flag.description(of: "Set display styles")
+      |> flag.build,
     ),
-    flag.strings(
-      called: "color",
-      default: ["pink"],
-      explained: "Set a foreground color",
+    #(
+      "color",
+      flag.string_list()
+      |> flag.default(of: ["pink"])
+      |> flag.description(of: "Set a foreground color")
+      |> flag.build,
     ),
-    flag.strings(
-      called: "background",
-      default: [],
-      explained: "Set a background color",
+    #(
+      "background",
+      flag.string_list()
+      |> flag.default(of: [])
+      |> flag.description(of: "Set a background color")
+      |> flag.build,
     ),
   ]
 
@@ -100,35 +106,48 @@ pub fn workbook() -> Workbook {
     |> result.lazy_unwrap(or: toml.new)
 
   let target_flags = [
-    ["rad", "targets"]
-    |> toml.decode(from: toml, expect: dynamic.list(of: dynamic.string))
-    |> result.lazy_or(fn() {
-      ["target"]
-      |> toml.decode(from: toml, expect: dynamic.string)
-      |> result.map(with: fn(target) { [target] })
-    })
-    |> result.unwrap(or: ["erlang"])
-    |> flag.strings(called: "target", explained: "The platforms to target"),
+    #(
+      "target",
+      flag.string_list()
+      |> flag.default(
+        of: ["rad", "targets"]
+        |> toml.decode(from: toml, expect: dynamic.list(of: dynamic.string))
+        |> result.lazy_or(fn() {
+          ["target"]
+          |> toml.decode(from: toml, expect: dynamic.string)
+          |> result.map(with: fn(target) { [target] })
+        })
+        |> result.unwrap(or: ["erlang"]),
+      )
+      |> flag.description(of: "The platforms to target")
+      |> flag.build,
+    ),
   ]
 
   let package_flags = [
-    flag.bool(
-      called: "all",
-      default: False,
-      explained: "Run the task for all packages",
+    #(
+      "all",
+      flag.bool()
+      |> flag.default(of: False)
+      |> flag.description(of: "Run the task for all packages")
+      |> flag.build,
     ),
   ]
 
   let watch_flags = [
-    flag.bool(
-      called: "no-docs",
-      default: False,
-      explained: "Disable docs handling",
+    #(
+      "no-docs",
+      flag.bool()
+      |> flag.default(of: False)
+      |> flag.description(of: "Disable docs handling")
+      |> flag.build,
     ),
-    flag.int(
-      called: "port",
-      default: 7000,
-      explained: "Request live reloads over port (default 7000)",
+    #(
+      "port",
+      flag.int()
+      |> flag.default(of: 7000)
+      |> flag.description(of: "Request live reloads over port (default 7000)")
+      |> flag.build,
     ),
     ..target_flags
   ]
@@ -215,7 +234,7 @@ pub fn workbook() -> Workbook {
     |> task.new(run: docs_build)
     |> task.for(
       each: task.packages
-      |> task.or(cond: "all", else: task.arguments),
+      |> task.or(cond: "all", otherwise: task.arguments),
     )
     |> task.shortdoc("Render HTML documentation")
     |> task.flags(add: package_flags)
@@ -295,7 +314,7 @@ pub fn workbook() -> Workbook {
     |> task.new(run: name)
     |> task.for(
       each: task.packages
-      |> task.or(cond: "all", else: task.arguments),
+      |> task.or(cond: "all", otherwise: task.arguments),
     )
     |> task.shortdoc("Print package names")
     |> task.flags(add: package_flags)
@@ -330,7 +349,7 @@ pub fn workbook() -> Workbook {
   )
   |> workbook.task(
     add: ["test"]
-    |> task.new(run: test)
+    |> task.new(run: tests)
     |> task.for(each: task.targets)
     |> task.shortdoc("Run the project tests")
     |> task.flags(add: target_flags)
@@ -346,7 +365,7 @@ pub fn workbook() -> Workbook {
     |> task.new(run: version)
     |> task.for(
       each: task.packages
-      |> task.or(cond: "all", else: task.arguments),
+      |> task.or(cond: "all", otherwise: task.arguments),
     )
     |> task.shortdoc("Print package versions")
     |> task.flags(add: package_flags)
@@ -381,13 +400,21 @@ pub fn workbook() -> Workbook {
 /// given the `--version` flag.
 ///
 pub fn root(input: CommandInput, task: Task(Result)) -> Result {
-  let assert Ok(flag.B(ver)) =
+  let ver =
     "version"
-    |> flag.get(from: input.flags)
+    |> flag.get_bool(from: input.flags)
+    |> result.unwrap(or: False)
   case ver {
     True -> {
       let flags =
-        [#("bare", flag.Contents(value: flag.B(False), description: ""))]
+        [
+          #(
+            "bare",
+            flag.bool()
+            |> flag.default(of: False)
+            |> flag.build,
+          ),
+        ]
         |> flag.build_map
       let version = fn(args) {
         args
@@ -422,15 +449,15 @@ pub fn config(input: CommandInput, task: Task(Result)) -> Result {
 /// are given, the current project's documentation is rendered.
 ///
 pub fn docs_build(input: CommandInput, task: Task(Result)) -> Result {
-  let assert Ok(flag.B(all)) =
+  let all =
     "all"
-    |> flag.get(from: input.flags)
+    |> flag.get_bool(from: input.flags)
+    |> result.unwrap(or: False)
 
-  use #(name, is_self) <- result.try(self_or_dependency(
-    input,
-    task,
-    self: fn(self, _config) { Ok(self) },
-    or: fn(config) {
+  use #(name, is_self) <- result.try(
+    self_or_dependency(input, task, self: fn(self, _config) { Ok(self) }, or: fn(
+      config,
+    ) {
       case all {
         True ->
           input.args
@@ -440,8 +467,8 @@ pub fn docs_build(input: CommandInput, task: Task(Result)) -> Result {
           input.args
           |> dependency_name(from: config)
       }
-    },
-  ))
+    }),
+  )
 
   let path = case is_self {
     True -> "."
@@ -458,11 +485,10 @@ pub fn docs_build(input: CommandInput, task: Task(Result)) -> Result {
   case is_gleam {
     True ->
       ["docs", "build"]
-      |> shellout.command(
-        run: "gleam",
-        in: path,
-        opt: [LetBeStderr, LetBeStdout],
-      )
+      |> shellout.command(run: "gleam", in: path, opt: [
+        LetBeStderr,
+        LetBeStdout,
+      ])
       |> result.replace_error(snag.new("failed building docs"))
       |> result.try(apply: fn(_output) {
         case is_self {
@@ -536,9 +562,9 @@ pub fn docs_serve(input: CommandInput, _task: Task(Result)) -> Result {
 
   io.println("")
 
-  let assert Ok(flag.S(host)) =
+  let assert Ok(host) =
     "host"
-    |> flag.get(from: input.flags)
+    |> flag.get_string(from: input.flags)
   let assert Ok(flags) = case host {
     "localhost" ->
       "--host=127.0.0.1"
@@ -592,22 +618,24 @@ pub fn docs_serve(input: CommandInput, _task: Task(Result)) -> Result {
 /// and successful for this [`Runner`](../task.html#Runner) to succeed.
 ///
 pub fn format(input: CommandInput, task: Task(Result)) -> Result {
-  let assert Ok(flag.B(fail)) =
+  let fail =
     "fail"
-    |> flag.get(from: input.flags)
+    |> flag.get_bool(from: input.flags)
+    |> result.unwrap(or: False)
   use _result <- result.try(case fail {
     True -> snag.error("invalid formatter in `gleam.toml`")
     False -> Ok("")
   })
 
   use result <- result.try(
-    map.new()
+    dict.new()
     |> CommandInput(args: [])
     |> task.basic(input.args)(task)
     |> result.map_error(with: fn(_snag) {
-      let assert Ok(flag.B(check)) =
+      let check =
         "check"
-        |> flag.get(from: input.flags)
+        |> flag.get_bool(from: input.flags)
+        |> result.unwrap(or: False)
       case check {
         True -> "failed format check"
         False -> "failed formatting"
@@ -616,10 +644,11 @@ pub fn format(input: CommandInput, task: Task(Result)) -> Result {
     }),
   )
 
-  let [command, ..] = input.args
-  let assert Ok(flag.B(check)) =
+  let assert [command, ..] = input.args
+  let check =
     "check"
-    |> flag.get(from: input.flags)
+    |> flag.get_bool(from: input.flags)
+    |> result.unwrap(or: False)
   let action = case check {
     True -> "Checked"
     False -> "Formatted"
@@ -646,12 +675,14 @@ pub fn format(input: CommandInput, task: Task(Result)) -> Result {
 /// Can be useful as a building block in other [`Runner`](../task.html#Runner)s.
 ///
 pub fn name(input: CommandInput, task: Task(Result)) -> Result {
-  use #(name, _is_self) <- result.try(self_or_dependency(
-    input,
-    task,
-    self: fn(self, _config) { Ok(self) },
-    or: dependency_name(input.args, from: _),
-  ))
+  use #(name, _is_self) <- result.try(
+    self_or_dependency(
+      input,
+      task,
+      self: fn(self, _config) { Ok(self) },
+      or: dependency_name(input.args, from: _),
+    ),
+  )
 
   name
   |> shellout.style(with: style_flags(input.flags), custom: util.lookups)
@@ -665,17 +696,17 @@ pub fn name(input: CommandInput, task: Task(Result)) -> Result {
 ///
 fn style_flags(flags: flag.Map) -> StyleFlags {
   flags
-  |> map.filter(for: fn(_key, contents) {
-    let flag.Contents(value: value, ..) = contents
+  |> dict.filter(keeping: fn(_key, x) {
+    let Flag(value: value, ..) = x
     case value {
       flag.LS(_strings) -> True
       _else -> False
     }
   })
-  |> map.map_values(with: fn(_key, contents) {
-    let flag.Contents(value: value, ..) = contents
-    let assert flag.LS(value) = value
-    value
+  |> dict.map_values(with: fn(_key, x) {
+    x
+    |> flag.get_strings_value
+    |> result.unwrap(or: [])
   })
 }
 
@@ -742,10 +773,9 @@ fn do_ping(uri_string: String, headers: List(Header)) -> gleam.Result(Int, Int) 
   )
 
   headers
-  |> list.fold(
-    from: request,
-    with: fn(acc, header) { request.prepend_header(acc, header.0, header.1) },
-  )
+  |> list.fold(from: request, with: fn(acc, header) {
+    request.prepend_header(acc, header.0, header.1)
+  })
   |> httpc.send
   |> result.map(with: fn(response) { response.status })
   |> result.replace_error(503)
@@ -761,7 +791,11 @@ fn do_ping(uri_string: String, headers: List(Header)) -> gleam.Result(Int, Int) 
 
   let script =
     [
-      "fetch('" <> uri_string <> "', " <> headers <> ")",
+      "fetch('"
+      <> uri_string
+      <> "', "
+      <> headers
+      <> ")",
       ".then(response => response.status)",
       ".catch(() => 503)",
       ".then(console.log)",
@@ -837,7 +871,9 @@ fn do_shell(input: CommandInput, task: Task(Result)) -> Result {
   }
   let javascript =
     [
-      "import('" <> util.rad_path <> "/rad_ffi.mjs')",
+      "import('"
+      <> util.rad_path
+      <> "/rad_ffi.mjs')",
       ".then(module => module.load_modules())",
     ]
     |> string.concat
@@ -854,7 +890,15 @@ fn do_shell(input: CommandInput, task: Task(Result)) -> Result {
         |> result.replace_error(snag.new("failed to find `ebin` paths")),
       )
       [
-        ["--app", name],
+        [
+          "--eval",
+          "Application.ensure_all_started(:"
+          <> name
+          <> ")
+          :code.all_available()
+          |> Enum.map(fn {module, _, _} -> List.to_atom(module) end)
+          |> :code.ensure_modules_loaded",
+        ],
         [
           "--erl",
           ["-pa", ..ebins]
@@ -879,7 +923,8 @@ fn do_shell(input: CommandInput, task: Task(Result)) -> Result {
     "nodejs" | "node" ->
       [
         "--interactive",
-        "--eval=" <> javascript,
+        "--eval="
+        <> javascript,
         "--experimental-fetch",
         "--experimental-repl-await",
         "--no-warnings",
@@ -905,11 +950,11 @@ fn do_shell(input: CommandInput, task: Task(Result)) -> Result {
 /// targets = ["erlang", "javascript"]
 /// ```
 ///
-pub fn test(input: CommandInput, task: Task(Result)) -> Result {
+pub fn tests(input: CommandInput, task: Task(Result)) -> Result {
   let options = [LetBeStderr, LetBeStdout]
-  let assert Ok(flag.LS([target])) =
+  let assert Ok([target]) =
     "target"
-    |> flag.get(from: input.flags)
+    |> flag.get_strings(from: input.flags)
 
   let build = fn(target) {
     shellout.command(
@@ -938,7 +983,11 @@ pub fn test(input: CommandInput, task: Task(Result)) -> Result {
     "javascript" -> {
       use _result <- result.try(build(target))
       let script =
-        "import('./build/dev/javascript/" <> name <> "/" <> name <> "_test.mjs').then(module => module.main())"
+        "import('./build/dev/javascript/"
+        <> name
+        <> "/"
+        <> name
+        <> "_test.mjs').then(module => module.main())"
       util.javascript_run(
         deno: ["eval", script, "--unstable"],
         or: ["--eval=" <> script],
@@ -996,10 +1045,12 @@ pub fn tree(_input: CommandInput, _task: Task(Result)) -> Result {
       |> shellout.command(run: "tree", in: ".", opt: [])
       |> result.replace_error(snag.layer(error, "command `tree` not found"))
   }
-  |> result.map_error(with: function.compose(
-    snag.layer(_, "failed to find a known tree command"),
-    snag.layer(_, "failed to run task"),
-  ))
+  |> result.map_error(
+    with: function.compose(
+      snag.layer(_, "failed to find a known tree command"),
+      snag.layer(_, "failed to run task"),
+    ),
+  )
 }
 
 /// Prints stylized versions for packages found in your project's `gleam.toml`
@@ -1015,9 +1066,10 @@ pub fn tree(_input: CommandInput, _task: Task(Result)) -> Result {
 /// [`shellout.style`](https://hexdocs.pm/shellout/shellout.html#style).
 ///
 pub fn version(input: CommandInput, task: Task(Result)) -> Result {
-  let assert Ok(flag.B(bare)) =
+  let bare =
     "bare"
-    |> flag.get(from: input.flags)
+    |> flag.get_bool(from: input.flags)
+    |> result.unwrap(or: False)
 
   use name <- result.try(case bare {
     True -> Ok(None)
@@ -1027,37 +1079,39 @@ pub fn version(input: CommandInput, task: Task(Result)) -> Result {
       |> result.map(with: Some)
   })
 
-  use #(version, _is_self) <- result.try(self_or_dependency(
-    input,
-    task,
-    self: fn(_self, config) {
-      ["version"]
-      |> toml.decode(from: config, expect: dynamic.string)
-    },
-    or: fn(_config) {
-      let assert Parsed(manifest) = task.manifest
-      ["packages"]
-      |> toml.decode(
-        from: manifest,
-        expect: dynamic.list(of: toml.from_dynamic),
-      )
-      |> result.unwrap(or: [])
-      |> list.find_map(with: fn(toml) {
-        let decode = toml.decode(_, from: toml, expect: dynamic.string)
-        use name <- result.try(decode(["name"]))
-        case [name] == input.args {
-          True -> decode(["version"])
-          False -> snag.error("")
-        }
-      })
-      |> result.map_error(with: fn(_nil) {
-        let [name] = input.args
-        ["dependency `", name, "` not found"]
-        |> string.concat
-        |> snag.new
-      })
-    },
-  ))
+  use #(version, _is_self) <- result.try(
+    self_or_dependency(
+      input,
+      task,
+      self: fn(_self, config) {
+        ["version"]
+        |> toml.decode(from: config, expect: dynamic.string)
+      },
+      or: fn(_config) {
+        let assert Parsed(manifest) = task.manifest
+        ["packages"]
+        |> toml.decode(
+          from: manifest,
+          expect: dynamic.list(of: toml.from_dynamic),
+        )
+        |> result.unwrap(or: [])
+        |> list.find_map(with: fn(toml) {
+          let decode = toml.decode(_, from: toml, expect: dynamic.string)
+          use name <- result.try(decode(["name"]))
+          case [name] == input.args {
+            True -> decode(["version"])
+            False -> snag.error("")
+          }
+        })
+        |> result.map_error(with: fn(_nil) {
+          let assert [name] = input.args
+          ["dependency `", name, "` not found"]
+          |> string.concat
+          |> snag.new
+        })
+      },
+    ),
+  )
 
   let version =
     case bare {
@@ -1110,7 +1164,7 @@ fn do_watch(_input: CommandInput) -> Result {
 @target(javascript)
 fn do_watch(input: CommandInput) -> Result {
   let options = [LetBeStderr, LetBeStdout]
-  let [command, ..args] as watch_do = case input.args {
+  let assert [command, ..args] as watch_do = case input.args {
     [] -> {
       let rad = util.which_rad()
       let flags = util.relay_flags(input.flags)
@@ -1177,10 +1231,12 @@ fn do_watch(input: CommandInput) -> Result {
         "command `inotifywait` not found",
       ))
   }
-  |> result.map_error(with: function.compose(
-    snag.layer(_, "failed to find a known watcher command"),
-    snag.layer(_, "failed to run task"),
-  ))
+  |> result.map_error(
+    with: function.compose(
+      snag.layer(_, "failed to find a known watcher command"),
+      snag.layer(_, "failed to run task"),
+    ),
+  )
 }
 
 @target(javascript)
@@ -1210,15 +1266,16 @@ fn watch_loop(
 /// ```
 ///
 pub fn watch_do(input: CommandInput, _task: Task(Result)) -> Result {
-  let assert Ok(flag.B(no_docs)) =
+  let no_docs =
     "no-docs"
-    |> flag.get(from: input.flags)
-  let assert Ok(flag.I(port)) =
+    |> flag.get_bool(from: input.flags)
+    |> result.unwrap(or: False)
+  let assert Ok(port) =
     "port"
-    |> flag.get(from: input.flags)
+    |> flag.get_int(from: input.flags)
   let assert Ok(target_flag) =
     "target"
-    |> map.get(input.flags, _)
+    |> dict.get(input.flags, _)
 
   io.println("")
 
@@ -1244,7 +1301,7 @@ pub fn watch_do(input: CommandInput, _task: Task(Result)) -> Result {
         |> string.concat
       let _result =
         [uri_string]
-        |> CommandInput(flags: map.new())
+        |> CommandInput(flags: dict.new())
         |> ping(task.new(at: [], run: fn(_input, _task) { Ok("") }))
       Nil
     }
@@ -1254,9 +1311,9 @@ pub fn watch_do(input: CommandInput, _task: Task(Result)) -> Result {
     workbook()
     |> workbook.get(["test"])
   [#("target", target_flag)]
-  |> map.from_list
+  |> dict.from_list
   |> CommandInput(args: input.args)
-  |> task.trainer(test)(task)
+  |> task.trainer(tests)(task)
 }
 
 fn hello_lucy(input: CommandInput, _task: Task(Result)) -> Result {
@@ -1278,13 +1335,13 @@ fn hello_lucy(input: CommandInput, _task: Task(Result)) -> Result {
 "
     |> shellout.style(
       with: style_flags(input.flags)
-      |> map.merge(from: shellout.display(["bold", "italic"])),
+      |> dict.merge(from: shellout.display(["bold", "italic"])),
       custom: util.lookups,
     )
   let sparkles = shellout.style(
     _,
     with: shellout.display(["bold", "italic"])
-    |> map.merge(from: shellout.color(["buttercup"])),
+    |> dict.merge(from: shellout.color(["buttercup"])),
     custom: util.lookups,
   )
   let hello_joe =
@@ -1295,7 +1352,7 @@ fn hello_lucy(input: CommandInput, _task: Task(Result)) -> Result {
       "Hello, world!"
       |> shellout.style(
         with: shellout.display(["bold", "italic"])
-        |> map.merge(from: shellout.color(["purple"])),
+        |> dict.merge(from: shellout.color(["purple"])),
         custom: util.lookups,
       ),
       "✨"
@@ -1308,7 +1365,7 @@ fn hello_lucy(input: CommandInput, _task: Task(Result)) -> Result {
       "Gleam"
       |> shellout.style(
         with: shellout.display(["bold"])
-        |> map.merge(shellout.color(["pink"])),
+        |> dict.merge(shellout.color(["pink"])),
         custom: util.lookups,
       ),
       "! It's great to have you.",
@@ -1317,7 +1374,7 @@ fn hello_lucy(input: CommandInput, _task: Task(Result)) -> Result {
   let uri = shellout.style(
     _,
     with: shellout.display(["italic"])
-    |> map.merge(from: shellout.color(["boi-blue"])),
+    |> dict.merge(from: shellout.color(["boi-blue"])),
     custom: util.lookups,
   )
   let website =
@@ -1327,7 +1384,7 @@ fn hello_lucy(input: CommandInput, _task: Task(Result)) -> Result {
       "gleam.run"
       |> shellout.style(
         with: shellout.display(["italic"])
-        |> map.merge(shellout.color(["pink"])),
+        |> dict.merge(shellout.color(["pink"])),
         custom: util.lookups,
       ),
       "/documentation/"
@@ -1348,7 +1405,7 @@ fn hello_lucy(input: CommandInput, _task: Task(Result)) -> Result {
 }
 
 fn dependency_name(path: List(String), from config: Toml) {
-  let [name] = path
+  let assert [name] = path
   let is_dep = fn(which_deps) {
     [which_deps, name]
     |> toml.decode(from: config, expect: dynamic.string)

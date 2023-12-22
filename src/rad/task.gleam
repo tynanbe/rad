@@ -7,6 +7,7 @@
 ////
 
 import gleam
+import gleam/bool
 import gleam/dynamic
 import gleam/int
 import gleam/json
@@ -14,12 +15,12 @@ import gleam/list
 import gleam/pair
 import gleam/result
 import gleam/string
-import glint.{CommandInput}
-import glint/flag.{Flag}
-import rad/toml.{Toml}
+import glint.{type CommandInput, CommandInput}
+import glint/flag.{type Flag, type FlagBuilder}
+import rad/toml.{type Toml}
 import rad/util
 import shellout
-import snag.{Snag}
+import snag.{type Snag}
 
 /// The basic configuration unit for the `rad` command line interface.
 ///
@@ -45,7 +46,7 @@ pub type Task(a) {
     for: Iterable(a),
     delimiter: String,
     shortdoc: String,
-    flags: List(Flag),
+    flags: List(#(String, Flag)),
     parameters: List(#(String, String)),
     config: Parser,
     manifest: Parser,
@@ -162,12 +163,16 @@ pub fn flag(
   into task: Task(a),
   called name: String,
   explained description: String,
-  expect flag_fun: fn(String, b, String) -> Flag,
+  expect flag_fun: fn() -> FlagBuilder(b),
   default value: b,
 ) -> Task(a) {
-  let flag =
-    name
-    |> flag_fun(value, description)
+  let flag = #(
+    name,
+    flag_fun()
+    |> flag.default(of: value)
+    |> flag.description(of: description)
+    |> flag.build,
+  )
   let flags =
     task.flags
     |> list.append([flag])
@@ -179,7 +184,7 @@ pub fn flag(
 /// A [`Flag`](https://hexdocs.pm/glint/glint/flag.html#Flag) defines an
 /// optional argument that its [`Task`](#Task) accepts from command line input.
 ///
-pub fn flags(into task: Task(a), add flags: List(Flag)) -> Task(a) {
+pub fn flags(into task: Task(a), add flags: List(#(String, Flag))) -> Task(a) {
   let flags =
     task.flags
     |> list.append(flags)
@@ -297,16 +302,17 @@ pub fn with_manifest(task: Task(a)) -> Task(a) {
 pub fn or(
   true_fun: fn() -> Iterable(a),
   cond flag_name: String,
-  else false_fun: fn() -> Iterable(a),
+  otherwise false_fun: fn() -> Iterable(a),
 ) -> fn() -> Iterable(a) {
   let cond = fn(input: CommandInput) {
-    let assert Ok(flag.B(flag_value)) =
-      flag_name
-      |> flag.get(from: input.flags)
-    case flag_value {
-      True -> true_fun()
-      False -> false_fun()
-    }
+    flag_name
+    |> flag.get_bool(from: input.flags)
+    |> result.map(with: bool.lazy_guard(
+      when: _,
+      return: true_fun,
+      otherwise: false_fun,
+    ))
+    |> result.lazy_unwrap(or: false_fun)
   }
 
   let items_fun = fn(input: CommandInput, task) {
@@ -320,7 +326,7 @@ pub fn or(
     case cond(input) {
       Each(map: mapper, ..) -> mapper(input, task, index, item)
       _else -> {
-        let [item] = item
+        let assert [item] = item
         item
         |> json.decode(using: dynamic.list(of: dynamic.string))
         |> result.unwrap(or: [])
@@ -378,10 +384,7 @@ pub type Formatter {
 pub fn formatters() -> Iterable(a) {
   let formatters = [
     "gleam"
-    |> Formatter(
-      check: ["gleam", "format", "--check"],
-      run: ["gleam", "format"],
-    )
+    |> Formatter(check: ["gleam", "format", "--check"], run: ["gleam", "format"])
     |> Ok,
     ..formatters_from_config()
   ]
@@ -393,9 +396,10 @@ pub fn formatters() -> Iterable(a) {
 
   let mapper = fn(input: CommandInput, _task, index, _argument) {
     let io_println = util.quiet_or_println(input)
-    let assert Ok(flag.B(check)) =
+    let check =
       "check"
-      |> flag.get(from: input.flags)
+      |> flag.get_bool(from: input.flags)
+      |> result.unwrap(or: False)
     let result =
       formatters
       |> list.at(get: index)
@@ -499,9 +503,10 @@ pub fn packages() -> Iterable(a) {
 ///
 pub fn targets() -> Iterable(a) {
   let items_fun = fn(input: CommandInput, _task) {
-    let assert Ok(flag.LS(targets)) =
+    let targets =
       "target"
-      |> flag.get(from: input.flags)
+      |> flag.get_strings(from: input.flags)
+      |> result.unwrap(or: [])
     targets
     |> list.unique
   }
@@ -543,7 +548,7 @@ pub fn targets() -> Iterable(a) {
 ///
 pub fn basic(command: List(String)) -> Runner(Result) {
   fn(input: CommandInput, _task) {
-    let [command, ..args] = command
+    let assert [command, ..args] = command
     [args, util.relay_flags(input.flags), input.args]
     |> list.concat
     |> shellout.command(run: command, in: ".", opt: util.quiet_or_spawn(input))
@@ -608,7 +613,7 @@ pub fn trainer(runner: Runner(Result)) -> Runner(Result) {
         }
         _else ->
           items
-          |> list.index_map(with: fn(index, item) {
+          |> list.index_map(with: fn(item, index) {
             let end_aggregate_run = fn(output) {
               let output = case string.ends_with(output, "\n") {
                 True ->
@@ -655,7 +660,7 @@ pub fn trainer(runner: Runner(Result)) -> Runner(Result) {
       _any, [] ->
         oks
         |> result.values
-        |> list.filter(for: fn(output) { output != "" })
+        |> list.filter(keeping: fn(output) { output != "" })
         |> string.join(with: task.delimiter)
         |> Ok
       _else, _any -> {
@@ -694,13 +699,10 @@ fn parse(path: String) -> Parser {
 /// Sort [`Tasks`](#Tasks) alphabetically by `path`.
 ///
 pub fn sort(tasks: Tasks) -> Tasks {
-  list.sort(
-    tasks,
-    by: fn(a, b) {
-      let #(a, b) = remove_common_path(a.path, b.path)
-      string.compare(a, b)
-    },
-  )
+  list.sort(tasks, by: fn(a, b) {
+    let #(a, b) = remove_common_path(a.path, b.path)
+    string.compare(a, b)
+  })
 }
 
 fn remove_common_path(a: List(String), b: List(String)) -> #(String, String) {
@@ -710,8 +712,8 @@ fn remove_common_path(a: List(String), b: List(String)) -> #(String, String) {
       _else -> strings
     }
   }
-  let [head_a, ..a] = nonempty(a)
-  let [head_b, ..b] = nonempty(b)
+  let assert [head_a, ..a] = nonempty(a)
+  let assert [head_b, ..b] = nonempty(b)
   case head_a == head_b {
     True -> remove_common_path(a, b)
     False -> #(head_a, head_b)

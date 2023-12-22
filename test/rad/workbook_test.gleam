@@ -1,10 +1,10 @@
+import gleam/dict
 import gleam/list
-import gleam/map
 import gleam/option
 import gleam/string
 import gleeunit/should
 import rad/task.{Parsed}
-import rad/workbook.{Workbook}
+import rad/workbook.{type Workbook}
 import rad_test
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
@@ -25,7 +25,7 @@ pub fn from_tasks_test() {
     |> task.new(run: task.basic(["echo"])),
   ]
   |> workbook.from_tasks
-  |> map.size
+  |> dict.size
   |> should.equal(3)
 }
 
@@ -33,7 +33,7 @@ pub fn builder_test() {
   ["corsola"]
   |> task.new(run: task.basic(["echo"]))
   |> workbook.task(into: workbook.new())
-  |> map.size
+  |> dict.size
   |> should.equal(1)
 
   workbook.new()
@@ -52,7 +52,7 @@ pub fn builder_test() {
     |> workbook.tasks(into: workbook.new())
 
   workbook
-  |> map.size
+  |> dict.size
   |> should.equal(3)
 
   workbook
@@ -65,7 +65,7 @@ pub fn builder_test() {
     |> workbook.delete(task: [])
 
   workbook
-  |> map.size
+  |> dict.size
   |> should.equal(1)
 
   workbook
@@ -181,7 +181,7 @@ pub fn section_test() {
     when: _,
     enum: [],
     with: fn(_item) { #("", "") },
-    styled: map.new(),
+    styled: dict.new(),
     sorted: string.compare,
   )
 

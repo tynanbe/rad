@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Rad now requires Gleam v0.33 or later.
+- The `else` label in `rad/task.{or}` has been renamed to `otherwise`.
+- The `test` function in `rad/workbook/standard` has been renamed to `tests`.
+- Gleam module loading has been improved when running Elixir via the `rad shell`
+  command.
+
 ## v0.4.1 - 2023-09-09
 
 - Fix an incorrect shell script path.

@@ -1,4 +1,4 @@
-import gleam/map
+import gleam/dict
 import gleam/result
 import gleam/string
 import gleeunit/should
@@ -11,11 +11,11 @@ pub fn workbook_test() {
   let workbook = standard.workbook()
 
   workbook
-  |> map.get([])
+  |> dict.get([])
   |> should.be_ok
 
   workbook
-  |> map.get(["help"])
+  |> dict.get(["help"])
   |> should.be_ok
 }
 
@@ -37,7 +37,14 @@ pub fn root_test() {
   help
   |> should.be_ok
 
-  let flags = [flag.bool(called: "version", default: False, explained: "")]
+  let flags = [
+    #(
+      "version",
+      flag.bool()
+      |> flag.default(of: False)
+      |> flag.build,
+    ),
+  ]
 
   []
   |> rad_test.input(flags: flags)
@@ -102,7 +109,14 @@ pub fn config_test() {
 }
 
 pub fn name_test() {
-  let flags = [flag.bool(called: "all", default: False, explained: "")]
+  let flags = [
+    #(
+      "all",
+      flag.bool()
+      |> flag.default(of: False)
+      |> flag.build,
+    ),
+  ]
   let task =
     ["name"]
     |> rad_test.task(from: standard.workbook())
@@ -191,8 +205,18 @@ pub fn tree_test() {
 
 pub fn version_test() {
   let flags = [
-    flag.bool(called: "all", default: False, explained: ""),
-    flag.bool(called: "bare", default: False, explained: ""),
+    #(
+      "all",
+      flag.bool()
+      |> flag.default(of: False)
+      |> flag.build,
+    ),
+    #(
+      "bare",
+      flag.bool()
+      |> flag.default(of: False)
+      |> flag.build,
+    ),
   ]
   let task =
     ["version"]

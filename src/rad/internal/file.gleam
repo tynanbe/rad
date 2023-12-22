@@ -3,7 +3,7 @@
 //// The functions included in this module are for high-level concepts such as
 //// reading and writing.
 
-import gleam/bit_string
+import gleam/bit_array
 import gleam/result
 
 /// Reason represents all of the reasons that Erlang surfaces of why a file
@@ -561,16 +561,16 @@ pub fn read(from path: String) -> Result(String, Reason) {
   path
   |> do_read_bits()
   |> result.then(fn(content) {
-    case bit_string.to_string(content) {
+    case bit_array.to_string(content) {
       Ok(string) -> Ok(string)
       Error(Nil) -> Error(NotUtf8)
     }
   })
 }
 
-/// Read the contents of the given file as a BitString
+/// Read the contents of the given file as a BitArray
 ///
-/// Returns a Result containing the file's contents as a BitString if the
+/// Returns a Result containing the file's contents as a BitArray if the
 /// operation was successful, or Reason if the operation failed.
 ///
 /// ## Examples
@@ -586,13 +586,13 @@ pub fn read(from path: String) -> Result(String, Reason) {
 /// Error(Enoent)
 /// ```
 ///
-pub fn read_bits(from path: String) -> Result(BitString, Reason) {
+pub fn read_bits(from path: String) -> Result(BitArray, Reason) {
   do_read_bits(path)
 }
 
 @external(erlang, "file_ffi", "read_file")
 @external(javascript, "./rad_ffi.mjs", "no_fun")
-fn do_read_bits(a: path) -> Result(BitString, Reason)
+fn do_read_bits(a: path) -> Result(BitArray, Reason)
 
 /// Write the given String contents to a file of the given name.
 ///
@@ -614,11 +614,11 @@ fn do_read_bits(a: path) -> Result(BitString, Reason)
 ///
 pub fn write(contents contents: String, to path: String) -> Result(Nil, Reason) {
   contents
-  |> bit_string.from_string
+  |> bit_array.from_string
   |> do_write_bits(path)
 }
 
-/// Write the given BitString contents to a file of the given name.
+/// Write the given BitArray contents to a file of the given name.
 ///
 /// Returns a Result with Nil if the operation was successful or a Reason
 /// otherwise.
@@ -637,7 +637,7 @@ pub fn write(contents contents: String, to path: String) -> Result(Nil, Reason) 
 /// ```
 ///
 pub fn write_bits(
-  contents contents: BitString,
+  contents contents: BitArray,
   to path: String,
 ) -> Result(Nil, Reason) {
   do_write_bits(contents, path)
@@ -645,7 +645,7 @@ pub fn write_bits(
 
 @external(erlang, "file_ffi", "write_file")
 @external(javascript, "./rad_ffi.mjs", "no_fun")
-fn do_write_bits(a: BitString, b: String) -> Result(Nil, Reason)
+fn do_write_bits(a: BitArray, b: String) -> Result(Nil, Reason)
 
 /// Append the given String contents to a file of the given name.
 ///
@@ -667,11 +667,11 @@ fn do_write_bits(a: BitString, b: String) -> Result(Nil, Reason)
 ///
 pub fn append(contents contents: String, to path: String) -> Result(Nil, Reason) {
   contents
-  |> bit_string.from_string
+  |> bit_array.from_string
   |> do_append_bits(path)
 }
 
-/// Append the given BitString contents to a file of the given name.
+/// Append the given BitArray contents to a file of the given name.
 ///
 /// Returns a Result with Nil if the operation was successful or a Reason
 /// otherwise.
@@ -690,7 +690,7 @@ pub fn append(contents contents: String, to path: String) -> Result(Nil, Reason)
 /// ```
 ///
 pub fn append_bits(
-  contents contents: BitString,
+  contents contents: BitArray,
   to path: String,
 ) -> Result(Nil, Reason) {
   do_append_bits(contents, path)
@@ -699,7 +699,7 @@ pub fn append_bits(
 @external(erlang, "file_ffi", "append_file")
 @external(javascript, "./rad_ffi.mjs", "no_fun")
 fn do_append_bits(
-  contents contents: BitString,
+  contents contents: BitArray,
   path path: String,
 ) -> Result(Nil, Reason)
 

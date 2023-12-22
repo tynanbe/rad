@@ -5,15 +5,17 @@
 //// both `gleam` and `rad` can read from and work with.
 ////
 
-import gleam/dynamic.{DecodeError, DecodeErrors, Decoder, Dynamic}
+import gleam/dynamic.{
+  type DecodeError, type DecodeErrors, type Decoder, type Dynamic,
+}
 import gleam/list
 import gleam/result
 import gleam/string
-import snag.{Snag}
+import snag.{type Snag}
+@target(erlang)
+import gleam/dict
 @target(erlang)
 import gleam/function
-@target(erlang)
-import gleam/map
 
 /// A TOML [table](https://toml.io/en/v1.0.0#table) of dynamic data.
 ///
@@ -66,22 +68,22 @@ fn do_decode_every(
   key_path: List(String),
   decoder: Decoder(a),
 ) -> Result(List(#(String, a)), Snag) {
-  use map <- result.try(
+  use dict <- result.try(
     key_path
     |> decode(
       from: toml,
       expect: dynamic.from
-      |> function.compose(dynamic.map(of: dynamic.string, to: dynamic.dynamic)),
+      |> function.compose(dynamic.dict(of: dynamic.string, to: dynamic.dynamic)),
     ),
   )
 
-  map
-  |> map.to_list
+  dict
+  |> dict.to_list
   |> list.filter_map(with: fn(tuple) {
     let key = ""
     let assert Ok(toml) =
       [#(key, tuple)]
-      |> map.from_list
+      |> dict.from_list
       |> dynamic.from
       |> from_dynamic
     [key]
@@ -162,7 +164,7 @@ pub fn parse_file(path: String) -> Result(Toml, Snag) {
 fn do_parse_file(path: String) -> Result(Dynamic, Nil)
 
 fn decode_errors_to_snag(decode_errors: DecodeErrors, key_path: List(String)) {
-  let [head, ..rest] =
+  let assert [head, ..rest] =
     decode_errors
     |> list.map(with: fn(error: DecodeError) {
       let path = case error.path == [] {

@@ -1,14 +1,16 @@
+import gleam/dict
 import gleam/dynamic
 import gleam/function
 import gleam/int
 import gleam/list
-import gleam/map
 import gleam/result
 import gleam/string
 import gleeunit/should
-import glint.{CommandInput}
+import glint.{type CommandInput, CommandInput}
 import glint/flag
-import rad/task.{Each, Expected, None, Once, Parsed, Result, Task}
+import rad/task.{
+  type Result, type Task, Each, Expected, None, Once, Parsed, Task,
+}
 import rad/toml
 import rad/util
 import rad/workbook
@@ -61,16 +63,34 @@ pub fn builder_test() {
   let path = []
   let delimiter = ","
   let shortdoc = "Lucy, I'm home!"
-  let #(_name, flag1_contents) as flag1 =
-    "all"
-    |> flag.bool(default: False, explained: "For one")
+  let #(_name, flag1_contents) as flag1 = #(
+    "all",
+    flag.bool()
+    |> flag.default(of: False)
+    |> flag.description(of: "For one")
+    |> flag.build,
+  )
   let flags = [
-    flag.string(called: "one", default: "for", explained: "All"),
-    flag.strings(called: "target", default: ["erlang"], explained: ""),
+    #(
+      "one",
+      flag.string()
+      |> flag.default(of: "for")
+      |> flag.description(of: "All")
+      |> flag.build,
+    ),
+    #(
+      "target",
+      flag.string_list()
+      |> flag.default(of: ["erlang"])
+      |> flag.build,
+    ),
   ]
-  let #(_name, flag4_contents) as flag4 =
-    "zero"
-    |> flag.int(default: 0, explained: "")
+  let #(_name, flag4_contents) as flag4 = #(
+    "zero",
+    flag.int()
+    |> flag.default(of: 0)
+    |> flag.build,
+  )
   let parameter1 = #("[g]", "")
   let parameters = [#("[h]", ""), #("[i]", "Some j")]
   let parameter4 = #("[k]", "None")
@@ -127,7 +147,8 @@ pub fn builder_test() {
 
   [[flag1], flags, [flag4]]
   |> list.concat
-  |> should.equal(builder.flags)
+  |> string.inspect
+  |> should.equal(string.inspect(builder.flags))
 
   [[parameter1], parameters, [parameter4]]
   |> list.concat
@@ -215,9 +236,9 @@ pub fn targets_test() {
     iterable_builder()
     |> task.for(each: task.targets)
 
-  let assert Ok(flag.LS(targets)) =
+  let assert Ok(targets) =
     "target"
-    |> flag.get(from: input.flags)
+    |> flag.get_strings(from: input.flags)
 
   let assert Each(get: items_fun, map: mapper) = builder.for
 
@@ -227,9 +248,9 @@ pub fn targets_test() {
 
   let item = mapper(input, builder, 0, ["erlang"])
 
-  let assert Ok(flag.LS(target)) =
+  let assert Ok(target) =
     "target"
-    |> flag.get(from: item.flags)
+    |> flag.get_strings(from: item.flags)
 
   target
   |> should.equal(["erlang"])
@@ -241,7 +262,7 @@ pub fn or_test() {
     iterable_builder()
     |> task.for(
       each: task.packages
-      |> task.or(cond: "all", else: task.arguments),
+      |> task.or(cond: "all", otherwise: task.arguments),
     )
 
   let assert Each(get: items_fun, ..) = builder.for
@@ -251,7 +272,7 @@ pub fn or_test() {
   items
   |> should.equal(input.args)
 
-  let [first, ..] =
+  let assert [first, ..] =
     CommandInput(
       ..input,
       flags: "--all"
@@ -281,7 +302,7 @@ fn iterable_builder() {
 fn iterable_input() {
   let assert Ok(flags) =
     iterable_flags()
-    |> map.from_list
+    |> dict.from_list
     |> flag.update_flags(with: "--target=erlang,javascript")
   ["a", "b", "c"]
   |> CommandInput(flags: flags)
@@ -289,14 +310,30 @@ fn iterable_input() {
 
 fn iterable_flags() {
   [
-    "rad-test"
-    |> flag.bool(default: True, explained: ""),
-    "all"
-    |> flag.bool(default: False, explained: ""),
-    "check"
-    |> flag.bool(default: False, explained: ""),
-    "target"
-    |> flag.strings(default: ["erlang"], explained: ""),
+    #(
+      "rad-test",
+      flag.bool()
+      |> flag.default(of: True)
+      |> flag.build,
+    ),
+    #(
+      "all",
+      flag.bool()
+      |> flag.default(of: False)
+      |> flag.build,
+    ),
+    #(
+      "check",
+      flag.bool()
+      |> flag.default(of: False)
+      |> flag.build,
+    ),
+    #(
+      "target",
+      flag.string_list()
+      |> flag.default(of: ["erlang"])
+      |> flag.build,
+    ),
   ]
 }
 
@@ -518,7 +555,7 @@ pub fn tasks_from_config_test() {
 }
 
 pub fn sort_test() {
-  let [head, ..rest] =
+  let assert [head, ..rest] =
     standard.workbook()
     |> workbook.to_tasks
     |> list.sized_chunk(into: 3)
@@ -529,7 +566,7 @@ pub fn sort_test() {
   head.path
   |> should.equal([])
 
-  let #(_discard, [_watch, watch_do, ..]) =
+  let assert #(_discard, [_watch, watch_do, ..]) =
     rest
     |> list.split_while(satisfying: fn(task) { task.path != ["watch"] })
   watch_do.path

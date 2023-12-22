@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import process from "node:process";
-import { Error as GleamError, Ok, toList } from "./gleam.mjs";
+import { Empty, Error as GleamError, Ok, toList } from "./gleam.mjs";
 import { classify_dynamic } from "../gleam_stdlib/gleam_stdlib.mjs";
 import { DecodeError } from "../gleam_stdlib/gleam/dynamic.mjs";
 import * as shellout from "../shellout/shellout.mjs";
@@ -22,7 +22,7 @@ const default_workbook = "../rad/rad/workbook/standard.mjs";
 
 export function start_arguments() {
   let args = shellout.arguments$();
-  return (args.isEmpty() || globalThis.Deno) ? args : args.tail;
+  return (args instanceof Empty || globalThis.Deno) ? args : args.tail;
 }
 
 export function ebin_paths() {
@@ -271,7 +271,7 @@ export function working_directory() {
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
-// Miscellaneous Functions               //
+// Miscellaneous Functions                //
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
 export function no_fun() {

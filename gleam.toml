@@ -1,9 +1,9 @@
 name = "rad"
-version = "0.4.1"
+version = "1.0.0-dev"
 description = "A task runner for Gleam projects"
 licences = ["Apache-2.0"]
 target = "javascript"
-gleam = "~> 0.30"
+gleam = ">= 0.33.0"
 
 [repository]
 repo = "rad"
@@ -15,17 +15,17 @@ href = "https://gleam.run/"
 title = "Website"
 
 [dependencies]
-gleam_http = "~> 3.3"
-gleam_json = "~> 0.6"
-gleam_stdlib = "~> 0.30"
-glint = "~> 0.11.4"
-shellout = "~> 1.4"
-snag = "~> 0.2"
+gleam_http = "~> 3.5"
+gleam_json = "~> 0.7"
+gleam_stdlib = "~> 0.34"
+glint = "~> 0.13"
+shellout = "~> 1.5"
+snag = "~> 0.3"
 thoas = "~> 0.4"
 tomerl = "~> 0.5"
 
 [dev-dependencies]
-gleeunit = "~> 0.11"
+gleeunit = "~> 1.0"
 
 [javascript.deno]
 allow_all = true

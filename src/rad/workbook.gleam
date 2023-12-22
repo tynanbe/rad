@@ -1,19 +1,19 @@
 import gleam
+import gleam/dict.{type Dict}
 import gleam/dynamic
 import gleam/function
 import gleam/list
-import gleam/map.{Map}
-import gleam/option.{None, Option, Some}
-import gleam/order.{Order}
+import gleam/option.{type Option, None, Some}
+import gleam/order.{type Order}
 import gleam/pair
 import gleam/result
 import gleam/string
-import glint.{CommandInput}
+import glint.{type CommandInput}
 import glint/flag
-import rad/task.{Parsed, Result, Runner, Task, Tasks}
-import rad/toml.{Toml}
+import rad/task.{type Result, type Runner, type Task, type Tasks, Parsed, Task}
+import rad/toml.{type Toml}
 import rad/util
-import shellout.{StyleFlags}
+import shellout.{type StyleFlags}
 import snag
 
 const flag_color = "purple"
@@ -41,7 +41,7 @@ const tab = "    "
 /// [`rad.do_main`](../rad.html#do_main).
 ///
 pub type Workbook =
-  Map(List(String), Task(Result))
+  Dict(List(String), Task(Result))
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 // Workbook Builder Functions             //
@@ -50,7 +50,7 @@ pub type Workbook =
 /// Returns a new, empty [`Workbook`](#Workbook).
 ///
 pub fn new() -> Workbook {
-  map.new()
+  dict.new()
 }
 
 /// Converts a list of [`Tasks`](task.html#Tasks) into a
@@ -69,7 +69,7 @@ pub fn from_tasks(list: Tasks) -> Workbook {
 ///
 pub fn task(into workbook: Workbook, add task: Task(Result)) -> Workbook {
   workbook
-  |> map.insert(for: task.path, insert: task)
+  |> dict.insert(for: task.path, insert: task)
 }
 
 /// Returns a new [`Workbook`](#Workbook) with the given list of
@@ -91,7 +91,7 @@ pub fn get(
   task path: List(String),
 ) -> gleam.Result(Task(Result), Nil) {
   workbook
-  |> map.get(path)
+  |> dict.get(path)
 }
 
 /// Returns a new [`Workbook`](#Workbook) with any [`Task`](task.html#Task) at
@@ -99,14 +99,14 @@ pub fn get(
 ///
 pub fn delete(from workbook: Workbook, task path: List(String)) -> Workbook {
   workbook
-  |> map.delete(delete: path)
+  |> dict.delete(delete: path)
 }
 
 /// Converts a [`Workbook`](#Workbook) into a list of
 /// [`Tasks`](task.html#Tasks).
 ///
 pub fn to_tasks(workbook: Workbook) -> Tasks {
-  map.values(workbook)
+  dict.values(workbook)
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
@@ -138,7 +138,7 @@ pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
 
     use task <- result.try(
       workbook
-      |> map.get(path)
+      |> dict.get(path)
       |> result.replace_error(snag.new("rad task not found")),
     )
 
@@ -151,7 +151,9 @@ pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
           task.path
           |> list.split(at: list.length(path))
         case
-          path == compare_path && list.length(subpath) == 1 && task.shortdoc != ""
+          path == compare_path
+          && list.length(subpath) == 1
+          && task.shortdoc != ""
         {
           True ->
             Task(..task, path: subpath)
@@ -162,14 +164,24 @@ pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
 
     // Get flags
     let task_flags = [
-      "help"
-      |> flag.bool(default: False, explained: "Print help information"),
-      "with"
-      |> flag.string(default: "", explained: "Specify a rad runtime"),
+      #(
+        "help",
+        flag.bool()
+        |> flag.default(of: False)
+        |> flag.description(of: "Print help information")
+        |> flag.build,
+      ),
+      #(
+        "with",
+        flag.string()
+        |> flag.default(of: "")
+        |> flag.description(of: "Specify a rad runtime")
+        |> flag.build,
+      ),
       ..task.flags
-      |> list.filter(for: fn(flag) {
-        let #(_name, contents) = flag
-        contents.description != ""
+      |> list.filter(keeping: fn(flag) {
+        let #(_name, flag) = flag
+        flag.description != ""
       })
     ]
 
@@ -199,7 +211,7 @@ pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
         |> string.join(with: " ")
         |> shellout.style(
           with: shellout.display(["bold"])
-          |> map.merge(from: shellout.color([path_color])),
+          |> dict.merge(from: shellout.color([path_color])),
           custom: util.lookups,
         )
         |> Some
@@ -244,7 +256,7 @@ pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
       "rad"
       |> shellout.style(
         with: shellout.display(["bold"])
-        |> map.merge(from: shellout.color(["pink"])),
+        |> dict.merge(from: shellout.color(["pink"])),
         custom: util.lookups,
       )
       |> Some
@@ -290,7 +302,7 @@ pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
         when: has_tasks,
         enum: tasks,
         with: fn(task) {
-          let [name] = task.path
+          let assert [name] = task.path
           #(name, task.shortdoc)
         },
         styled: shellout.color([subcommand_color]),
@@ -324,7 +336,7 @@ pub fn info(config: Toml) -> Result {
     "rad"
     |> shellout.style(
       with: shellout.display(["bold", "italic"])
-      |> map.merge(from: shellout.color(["pink"])),
+      |> dict.merge(from: shellout.color(["pink"])),
       custom: util.lookups,
     )
     |> Some
@@ -348,7 +360,7 @@ pub fn info(config: Toml) -> Result {
     |> result.map(with: shellout.style(
       _,
       with: shellout.display(["italic"])
-      |> map.merge(from: shellout.color(["purple"])),
+      |> dict.merge(from: shellout.color(["purple"])),
       custom: util.lookups,
     ))
     |> option.from_result
@@ -373,7 +385,7 @@ pub fn heading(name: String) -> String {
   name
   |> shellout.style(
     with: shellout.display(["bold"])
-    |> map.merge(from: shellout.color([heading_color])),
+    |> dict.merge(from: shellout.color([heading_color])),
     custom: util.lookups,
   )
 }
@@ -404,16 +416,13 @@ pub fn section(
         |> list.map(with: format_fun)
       let width =
         items
-        |> list.fold(
-          from: 0,
-          with: fn(acc, item) {
-            let length = string.length(item.0)
-            case length > acc {
-              True -> length
-              False -> acc
-            }
-          },
-        )
+        |> list.fold(from: 0, with: fn(acc, item) {
+          let length = string.length(item.0)
+          case length > acc {
+            True -> length
+            False -> acc
+          }
+        })
       [
         heading(name),
         ..items

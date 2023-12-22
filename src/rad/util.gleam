@@ -1,21 +1,21 @@
 //// A motley assortment of utility functions.
 ////
 
+import gleam/dict
 import gleam/dynamic
 import gleam/float
 import gleam/function
 import gleam/int
 import gleam/io
 import gleam/list
-import gleam/map
 import gleam/result
 import gleam/string
 import gleam/string_builder
-import glint.{CommandInput}
-import glint/flag
+import glint.{type CommandInput}
+import glint/flag.{type Flag, Flag}
 import rad/toml
-import shellout.{CommandOpt, LetBeStderr, LetBeStdout, Lookups}
-import snag.{Snag}
+import shellout.{type CommandOpt, type Lookups, LetBeStderr, LetBeStdout}
+import snag.{type Snag}
 @target(erlang)
 import rad/internal/file.{Enoent}
 
@@ -351,7 +351,7 @@ pub fn snag_pretty_print(snag: Snag) -> String {
 
 fn pretty_print_cause(cause) {
   cause
-  |> list.index_map(with: fn(index, line) {
+  |> list.index_map(with: fn(line, index) {
     [
       "  ",
       index
@@ -372,7 +372,7 @@ fn bold(string, and colors: List(String)) -> String {
   string
   |> shellout.style(
     with: shellout.display(["bold"])
-    |> map.merge(from: shellout.color(colors)),
+    |> dict.merge(from: shellout.color(colors)),
     custom: lookups,
   )
 }
@@ -385,36 +385,44 @@ fn bold(string, and colors: List(String)) -> String {
 /// process.
 ///
 pub fn relay_flags(flags: flag.Map) -> List(String) {
-  flags
-  |> map.delete(delete: test_flag)
-  |> map.to_list
-  |> list.filter_map(with: fn(flag) {
-    let #(key, flag.Contents(value: value, ..)) = flag
-    let relay_flag = fn(value: a, fun) {
-      ["--", key, "=", fun(value)]
-      |> string.concat
-      |> Ok
-    }
-    let relay_multiflag = fn(value: List(a), fun) {
-      list.map(_, with: fun)
-      |> function.compose(string.join(_, with: ","))
-      |> relay_flag(value, _)
-    }
+  let flags =
+    flags
+    |> dict.delete(delete: test_flag)
+    |> dict.to_list
 
-    case value {
-      flag.B(value) if value ->
-        ["--", key]
-        |> string.concat
-        |> Ok
-      flag.F(value) -> relay_flag(value, float.to_string)
-      flag.I(value) -> relay_flag(value, int.to_string)
-      flag.LF(value) -> relay_multiflag(value, float.to_string)
-      flag.LI(value) -> relay_multiflag(value, int.to_string)
-      flag.LS(value) -> relay_multiflag(value, function.identity)
-      flag.S(value) -> relay_flag(value, function.identity)
-      _else -> Error(Nil)
-    }
-  })
+  use #(key, flag) <- list.filter_map(flags)
+  let Flag(value: value, ..) = flag
+
+  let relay_flag = fn(get_fun: fn(Flag) -> snag.Result(a), string_fun) {
+    use value <- result.map(
+      over: flag
+      |> get_fun
+      |> result.nil_error,
+    )
+    "--" <> key <> "=" <> string_fun(value)
+  }
+  let relay_multiflag = fn(
+    get_fun: fn(Flag) -> snag.Result(List(a)),
+    string_fun,
+  ) {
+    list.map(_, with: string_fun)
+    |> function.compose(string.join(_, with: ","))
+    |> relay_flag(get_fun, _)
+  }
+
+  case value {
+    flag.B(_) ->
+      case flag.get_bool_value(from: flag) {
+        Ok(True) -> Ok("--" <> key)
+        _else -> Error(Nil)
+      }
+    flag.F(_) -> relay_flag(flag.get_float_value, float.to_string)
+    flag.I(_) -> relay_flag(flag.get_int_value, int.to_string)
+    flag.LF(_) -> relay_multiflag(flag.get_floats_value, float.to_string)
+    flag.LI(_) -> relay_multiflag(flag.get_ints_value, int.to_string)
+    flag.LS(_) -> relay_multiflag(flag.get_strings_value, function.identity)
+    flag.S(_) -> relay_flag(flag.get_string_value, function.identity)
+  }
 }
 
 /// Returns the path of a runnable `rad` invocation script.
@@ -451,7 +459,7 @@ const test_flag = "rad-test"
 //pub fn delete_test_flag(input: CommandInput) -> CommandInput {
 //  let flags =
 //    test_flag
-//    |> map.delete(from: input.flags)
+//    |> dict.delete(from: input.flags)
 //  CommandInput(..input, flags: flags)
 //}
 
@@ -499,11 +507,7 @@ pub fn quiet_or_spawn(input: CommandInput) -> List(CommandOpt) {
 }
 
 fn is_test(input: CommandInput) -> Bool {
-  let result =
-    test_flag
-    |> flag.get(from: input.flags)
-  case result {
-    Ok(flag.B(test)) -> test
-    _else -> False
-  }
+  input.flags
+  |> flag.get_bool(for: test_flag)
+  |> result.unwrap(or: False)
 }

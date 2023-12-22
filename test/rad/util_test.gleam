@@ -34,7 +34,9 @@ pub fn ebin_paths_test() {
 pub fn javascript_run_test() {
   let run_module = fn(module) {
     let script =
-      "import('./build/dev/javascript/rad/" <> module <> ".mjs').then(module => module.main())"
+      "import('./build/dev/javascript/rad/"
+      <> module
+      <> ".mjs').then(module => module.main())"
     util.javascript_run(
       deno: ["eval", script, "--unstable"],
       or: ["--eval=" <> script],
@@ -117,22 +119,54 @@ pub fn encode_json_test() {
 
 pub fn relay_flags_test() {
   [
-    "rad-test"
-    |> flag.bool(default: True, explained: ""),
-    "eevee"
-    |> flag.bool(default: False, explained: ""),
-    "vaporeon"
-    |> flag.float(default: 1.0, explained: ""),
-    "jolteon"
-    |> flag.floats(default: [2.0, 0.2], explained: ""),
-    "flareon"
-    |> flag.int(default: 3, explained: ""),
-    "espeon"
-    |> flag.ints(default: [4, 0, 4], explained: ""),
-    "umbreon"
-    |> flag.string(default: "5", explained: ""),
-    "ditto"
-    |> flag.strings(default: ["eevee"], explained: ""),
+    #(
+      "rad-test",
+      flag.bool()
+      |> flag.default(of: True)
+      |> flag.build,
+    ),
+    #(
+      "eevee",
+      flag.bool()
+      |> flag.default(of: False)
+      |> flag.build,
+    ),
+    #(
+      "vaporeon",
+      flag.float()
+      |> flag.default(of: 1.0)
+      |> flag.build,
+    ),
+    #(
+      "jolteon",
+      flag.float_list()
+      |> flag.default(of: [2.0, 0.2])
+      |> flag.build,
+    ),
+    #(
+      "flareon",
+      flag.int()
+      |> flag.default(of: 3)
+      |> flag.build,
+    ),
+    #(
+      "espeon",
+      flag.int_list()
+      |> flag.default(of: [4, 0, 4])
+      |> flag.build,
+    ),
+    #(
+      "umbreon",
+      flag.string()
+      |> flag.default(of: "5")
+      |> flag.build,
+    ),
+    #(
+      "ditto",
+      flag.string_list()
+      |> flag.default(of: ["eevee"])
+      |> flag.build,
+    ),
   ]
   |> flag.build_map
   |> util.relay_flags

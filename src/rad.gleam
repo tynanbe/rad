@@ -1,19 +1,19 @@
 import gleam/bool
+import gleam/dict
 import gleam/dynamic
 import gleam/function
 import gleam/io
 import gleam/list
-import gleam/map
 import gleam/result
 import gleam/string
-import glint.{Help, Out}
+import glint.{type CommandInput, Help, Out}
 import glint/flag
 import rad/task
 import rad/toml
 import rad/util
-import rad/workbook.{Workbook}
+import rad/workbook.{type Workbook}
 import shellout.{LetBeStderr, LetBeStdout}
-import snag.{Snag}
+import snag.{type Snag, Snag}
 
 const default_workbook = "rad/workbook/standard"
 
@@ -37,16 +37,19 @@ pub fn main() -> Nil {
     |> result.unwrap(or: "javascript")
   let assert Ok(Out(with)) =
     glint.new()
-    |> glint.add_command(
+    |> glint.add(
       at: [],
-      do: fn(input) {
-        let assert Ok(flag.S(with)) =
-          "with"
-          |> flag.get(from: input.flags)
-        with
-      },
-      with: [flag.string(called: "with", default: with, explained: "")],
-      described: "",
+      do: fn(input: CommandInput) {
+        "with"
+        |> flag.get_string(from: input.flags)
+        |> result.unwrap(or: with)
+      }
+      |> glint.command
+      |> glint.flag(
+        at: "with",
+        of: flag.string()
+        |> flag.default(of: with),
+      ),
     )
     |> glint.execute(arguments(Global))
 
@@ -62,7 +65,8 @@ pub fn main() -> Nil {
     or: case with {
       "javascript" -> "../rad/"
       _else -> ""
-    } <> default_workbook,
+    }
+    <> default_workbook,
   )
   |> gleam_run(package, _)
 }
@@ -87,18 +91,16 @@ pub fn do_main(workbook: Workbook) -> Nil {
   }))
   |> result.values
   |> workbook.tasks(into: workbook)
-  |> map.fold(
-    from: glint.new(),
-    with: fn(acc, path, task) {
-      acc
-      |> glint.add_command(
-        at: path,
-        do: task.run(_, task),
-        with: task.flags,
-        described: task.shortdoc,
-      )
-    },
-  )
+  |> dict.fold(from: glint.new(), with: fn(acc, path, task) {
+    acc
+    |> glint.add(
+      at: path,
+      do: task.run(_, task)
+      |> glint.command
+      |> glint.flags(with: task.flags)
+      |> glint.description(task.shortdoc),
+    )
+  })
   |> glint.execute(arguments(Normal))
   |> result.map(with: fn(output) {
     case output {
@@ -119,7 +121,7 @@ fn arguments(scope: Scope) -> List(String) {
   let filter = string.starts_with(_, "--with=")
   let arguments =
     start_arguments()
-    |> list.filter(for: case scope {
+    |> list.filter(keeping: case scope {
       Global -> filter
       Normal ->
         filter
@@ -131,17 +133,14 @@ fn arguments(scope: Scope) -> List(String) {
       // Help flag uses rad's workbook.help
       let #(arguments, is_help) =
         arguments
-        |> list.fold(
-          from: #([], False),
-          with: fn(acc, argument) {
-            let #(arguments, is_help) = acc
-            case argument {
-              "--help" | "--help=true" -> #(arguments, True)
-              "--help=false" -> #(arguments, False)
-              _else -> #([argument, ..arguments], is_help)
-            }
-          },
-        )
+        |> list.fold(from: #([], False), with: fn(acc, argument) {
+          let #(arguments, is_help) = acc
+          case argument {
+            "--help" | "--help=true" -> #(arguments, True)
+            "--help=false" -> #(arguments, False)
+            _else -> #([argument, ..arguments], is_help)
+          }
+        })
       let arguments =
         arguments
         |> list.reverse

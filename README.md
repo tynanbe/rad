@@ -279,12 +279,12 @@ dependent projects!
 import gleam/dynamic
 import gleam/json
 import gleam/result
-import glint.{CommandInput}
+import glint.{type CommandInput}
 import glint/flag
 import rad
-import rad/task.{Result, Task}
+import rad/task.{type Result, type Task}
 import rad/util
-import rad/workbook.{Workbook}
+import rad/workbook.{type Workbook}
 import rad/workbook/standard
 import snag
 
@@ -320,9 +320,10 @@ pub fn workbook() -> Workbook {
 }
 
 pub fn root(input: CommandInput, task: Task(Result)) -> Result {
-  let assert Ok(flag.B(ver)) =
+  let ver =
     "version"
-    |> flag.get_value(from: input.flags)
+    |> flag.get_bool(from: input.flags)
+    |> result.unwrap(or: False)
   case ver {
     True -> standard.root(input, task)
     False -> workbook.help(from: workbook)(input, task)
@@ -341,8 +342,7 @@ pub fn commit(_input: CommandInput, _task: Task(Result)) -> Result {
     "
 
   use output <- result.try(
-    ["--eval", script]
-    |> util.javascript_run(opt: []),
+    util.javascript_run(deno: ["eval", script], or: ["--eval", script], opt: []),
   )
 
   let snag = snag.new("service unreachable")
