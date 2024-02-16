@@ -8,6 +8,7 @@
 
 import gleam
 import gleam/bool
+import gleam/dict
 import gleam/dynamic
 import gleam/int
 import gleam/json
@@ -169,9 +170,9 @@ pub fn flag(
   let flag = #(
     name,
     flag_fun()
-    |> flag.default(of: value)
-    |> flag.description(of: description)
-    |> flag.build,
+      |> flag.default(of: value)
+      |> flag.description(of: description)
+      |> flag.build,
   )
   let flags =
     task.flags
@@ -322,6 +323,8 @@ pub fn or(
     }
   }
 
+  let named_args = dict.new()
+
   let mapper = fn(input: CommandInput, task, index, item) {
     case cond(input) {
       Each(map: mapper, ..) -> mapper(input, task, index, item)
@@ -330,7 +333,7 @@ pub fn or(
         item
         |> json.decode(using: dynamic.list(of: dynamic.string))
         |> result.unwrap(or: [])
-        |> CommandInput(flags: input.flags)
+        |> CommandInput(flags: input.flags, named_args: named_args)
       }
     }
   }
@@ -384,8 +387,10 @@ pub type Formatter {
 pub fn formatters() -> Iterable(a) {
   let formatters = [
     "gleam"
-    |> Formatter(check: ["gleam", "format", "--check"], run: ["gleam", "format"])
-    |> Ok,
+      |> Formatter(check: ["gleam", "format", "--check"], run: [
+        "gleam", "format",
+      ])
+      |> Ok,
     ..formatters_from_config()
   ]
 
@@ -393,6 +398,8 @@ pub fn formatters() -> Iterable(a) {
     formatters
     |> list.map(with: fn(_result) { "" })
   }
+
+  let named_args = dict.new()
 
   let mapper = fn(input: CommandInput, _task, index, _argument) {
     let io_println = util.quiet_or_println(input)
@@ -414,7 +421,7 @@ pub fn formatters() -> Iterable(a) {
         let _print =
           [
             action
-            |> shellout.style(with: shellout.color(["magenta"]), custom: []),
+              |> shellout.style(with: shellout.color(["magenta"]), custom: []),
             " ",
             formatter.name,
             extra,
@@ -423,13 +430,13 @@ pub fn formatters() -> Iterable(a) {
           |> string.concat
           |> io_println
         args
-        |> CommandInput(flags: input.flags)
+        |> CommandInput(flags: input.flags, named_args: named_args)
       }
       _else ->
         "--fail"
         |> flag.update_flags(in: input.flags)
         |> result.unwrap(or: input.flags)
-        |> CommandInput(args: [])
+        |> CommandInput(args: [], named_args: named_args)
     }
   }
 
@@ -520,7 +527,7 @@ pub fn targets() -> Iterable(a) {
     let _heading =
       [
         "  Targeting"
-        |> shellout.style(with: shellout.color(["magenta"]), custom: []),
+          |> shellout.style(with: shellout.color(["magenta"]), custom: []),
         " ",
         target,
         "...",
@@ -672,7 +679,7 @@ pub fn trainer(runner: Runner(Result)) -> Runner(Result) {
           |> int.to_string
         [
           errors
-          |> int.to_string,
+            |> int.to_string,
           "of",
           results,
           "task runs failed",

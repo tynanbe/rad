@@ -41,8 +41,8 @@ pub fn root_test() {
     #(
       "version",
       flag.bool()
-      |> flag.default(of: False)
-      |> flag.build,
+        |> flag.default(of: False)
+        |> flag.build,
     ),
   ]
 
@@ -113,8 +113,8 @@ pub fn name_test() {
     #(
       "all",
       flag.bool()
-      |> flag.default(of: False)
-      |> flag.build,
+        |> flag.default(of: False)
+        |> flag.build,
     ),
   ]
   let task =
@@ -208,14 +208,14 @@ pub fn version_test() {
     #(
       "all",
       flag.bool()
-      |> flag.default(of: False)
-      |> flag.build,
+        |> flag.default(of: False)
+        |> flag.build,
     ),
     #(
       "bare",
       flag.bool()
-      |> flag.default(of: False)
-      |> flag.build,
+        |> flag.default(of: False)
+        |> flag.build,
     ),
   ]
   let task =

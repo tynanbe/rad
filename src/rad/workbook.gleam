@@ -167,16 +167,16 @@ pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
       #(
         "help",
         flag.bool()
-        |> flag.default(of: False)
-        |> flag.description(of: "Print help information")
-        |> flag.build,
+          |> flag.default(of: False)
+          |> flag.description(of: "Print help information")
+          |> flag.build,
       ),
       #(
         "with",
         flag.string()
-        |> flag.default(of: "")
-        |> flag.description(of: "Specify a rad runtime")
-        |> flag.build,
+          |> flag.default(of: "")
+          |> flag.description(of: "Specify a rad runtime")
+          |> flag.build,
       ),
       ..task.flags
       |> list.filter(keeping: fn(flag) {
@@ -211,7 +211,7 @@ pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
         |> string.join(with: " ")
         |> shellout.style(
           with: shellout.display(["bold"])
-          |> dict.merge(from: shellout.color([path_color])),
+            |> dict.merge(from: shellout.color([path_color])),
           custom: util.lookups,
         )
         |> Some
@@ -256,7 +256,7 @@ pub fn help(from workbook_fun: fn() -> Workbook) -> Runner(Result) {
       "rad"
       |> shellout.style(
         with: shellout.display(["bold"])
-        |> dict.merge(from: shellout.color(["pink"])),
+          |> dict.merge(from: shellout.color(["pink"])),
         custom: util.lookups,
       )
       |> Some
@@ -336,7 +336,7 @@ pub fn info(config: Toml) -> Result {
     "rad"
     |> shellout.style(
       with: shellout.display(["bold", "italic"])
-      |> dict.merge(from: shellout.color(["pink"])),
+        |> dict.merge(from: shellout.color(["pink"])),
       custom: util.lookups,
     )
     |> Some
@@ -360,19 +360,19 @@ pub fn info(config: Toml) -> Result {
     |> result.map(with: shellout.style(
       _,
       with: shellout.display(["italic"])
-      |> dict.merge(from: shellout.color(["purple"])),
+        |> dict.merge(from: shellout.color(["purple"])),
       custom: util.lookups,
     ))
     |> option.from_result
 
   [
     [name, version]
-    |> option.values
-    |> string.join(with: " ")
-    |> Some,
+      |> option.values
+      |> string.join(with: " ")
+      |> Some,
     [Some(""), description]
-    |> option.all
-    |> option.map(with: string.join(_, with: tab)),
+      |> option.all
+      |> option.map(with: string.join(_, with: tab)),
   ]
   |> option.values
   |> string.join(with: "\n")
@@ -385,7 +385,7 @@ pub fn heading(name: String) -> String {
   name
   |> shellout.style(
     with: shellout.display(["bold"])
-    |> dict.merge(from: shellout.color([heading_color])),
+      |> dict.merge(from: shellout.color([heading_color])),
     custom: util.lookups,
   )
 }

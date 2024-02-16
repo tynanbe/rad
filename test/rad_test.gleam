@@ -38,8 +38,8 @@ pub fn input(
       #(
         "rad-test",
         flag.bool()
-        |> flag.default(of: True)
-        |> flag.build,
+          |> flag.default(of: True)
+          |> flag.build,
       ),
       ..flags
     ]
@@ -47,26 +47,26 @@ pub fn input(
 
   let ArgAcc(flags: new_flags, args: args, ..) =
     args
-    |> list.fold(from: ArgAcc(flags: [], args: [], maybe_flag: True), with: fn(
-      acc,
-      arg,
-    ) {
-      case arg, acc.maybe_flag, string.starts_with(arg, flag.prefix) {
-        "--", True, _ -> ArgAcc(..acc, maybe_flag: False)
-        _else_if, True, True ->
-          ArgAcc(
-            ..acc,
-            flags: acc.flags
-            |> list.append([arg]),
-          )
-        _else, _, _ ->
-          ArgAcc(
-            ..acc,
-            args: acc.args
-            |> list.append([arg]),
-          )
-      }
-    })
+    |> list.fold(
+      from: ArgAcc(flags: [], args: [], maybe_flag: True),
+      with: fn(acc, arg) {
+        case arg, acc.maybe_flag, string.starts_with(arg, flag.prefix) {
+          "--", True, _ -> ArgAcc(..acc, maybe_flag: False)
+          _else_if, True, True ->
+            ArgAcc(
+              ..acc,
+              flags: acc.flags
+              |> list.append([arg]),
+            )
+          _else, _, _ ->
+            ArgAcc(
+              ..acc,
+              args: acc.args
+              |> list.append([arg]),
+            )
+        }
+      },
+    )
 
   new_flags
   |> list.fold(from: flags, with: fn(acc, flag) {
@@ -74,7 +74,7 @@ pub fn input(
     |> flag.update_flags(with: flag)
     |> result.unwrap(or: acc)
   })
-  |> CommandInput(args: args)
+  |> CommandInput(args: args, named_args: dict.new())
 }
 
 pub fn task(from workbook: Workbook, at path: List(String)) -> Task(Result) {

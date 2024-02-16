@@ -80,23 +80,23 @@ pub fn workbook() -> Workbook {
     #(
       "display",
       flag.string_list()
-      |> flag.default(of: ["bold"])
-      |> flag.description(of: "Set display styles")
-      |> flag.build,
+        |> flag.default(of: ["bold"])
+        |> flag.description(of: "Set display styles")
+        |> flag.build,
     ),
     #(
       "color",
       flag.string_list()
-      |> flag.default(of: ["pink"])
-      |> flag.description(of: "Set a foreground color")
-      |> flag.build,
+        |> flag.default(of: ["pink"])
+        |> flag.description(of: "Set a foreground color")
+        |> flag.build,
     ),
     #(
       "background",
       flag.string_list()
-      |> flag.default(of: [])
-      |> flag.description(of: "Set a background color")
-      |> flag.build,
+        |> flag.default(of: [])
+        |> flag.description(of: "Set a background color")
+        |> flag.build,
     ),
   ]
 
@@ -109,18 +109,18 @@ pub fn workbook() -> Workbook {
     #(
       "target",
       flag.string_list()
-      |> flag.default(
-        of: ["rad", "targets"]
-        |> toml.decode(from: toml, expect: dynamic.list(of: dynamic.string))
-        |> result.lazy_or(fn() {
-          ["target"]
-          |> toml.decode(from: toml, expect: dynamic.string)
-          |> result.map(with: fn(target) { [target] })
-        })
-        |> result.unwrap(or: ["erlang"]),
-      )
-      |> flag.description(of: "The platforms to target")
-      |> flag.build,
+        |> flag.default(
+          of: ["rad", "targets"]
+          |> toml.decode(from: toml, expect: dynamic.list(of: dynamic.string))
+          |> result.lazy_or(fn() {
+            ["target"]
+            |> toml.decode(from: toml, expect: dynamic.string)
+            |> result.map(with: fn(target) { [target] })
+          })
+          |> result.unwrap(or: ["erlang"]),
+        )
+        |> flag.description(of: "The platforms to target")
+        |> flag.build,
     ),
   ]
 
@@ -128,9 +128,9 @@ pub fn workbook() -> Workbook {
     #(
       "all",
       flag.bool()
-      |> flag.default(of: False)
-      |> flag.description(of: "Run the task for all packages")
-      |> flag.build,
+        |> flag.default(of: False)
+        |> flag.description(of: "Run the task for all packages")
+        |> flag.build,
     ),
   ]
 
@@ -138,16 +138,16 @@ pub fn workbook() -> Workbook {
     #(
       "no-docs",
       flag.bool()
-      |> flag.default(of: False)
-      |> flag.description(of: "Disable docs handling")
-      |> flag.build,
+        |> flag.default(of: False)
+        |> flag.description(of: "Disable docs handling")
+        |> flag.build,
     ),
     #(
       "port",
       flag.int()
-      |> flag.default(of: 7000)
-      |> flag.description(of: "Request live reloads over port (default 7000)")
-      |> flag.build,
+        |> flag.default(of: 7000)
+        |> flag.description(of: "Request live reloads over port (default 7000)")
+        |> flag.build,
     ),
     ..target_flags
   ]
@@ -411,14 +411,14 @@ pub fn root(input: CommandInput, task: Task(Result)) -> Result {
           #(
             "bare",
             flag.bool()
-            |> flag.default(of: False)
-            |> flag.build,
+              |> flag.default(of: False)
+              |> flag.build,
           ),
         ]
         |> flag.build_map
       let version = fn(args) {
         args
-        |> CommandInput(flags: flags)
+        |> CommandInput(flags: flags, named_args: dict.new())
         |> version(task)
       }
       ["rad"]
@@ -455,19 +455,22 @@ pub fn docs_build(input: CommandInput, task: Task(Result)) -> Result {
     |> result.unwrap(or: False)
 
   use #(name, is_self) <- result.try(
-    self_or_dependency(input, task, self: fn(self, _config) { Ok(self) }, or: fn(
-      config,
-    ) {
-      case all {
-        True ->
-          input.args
-          |> list.first
-          |> result.replace_error(snag.new("no package found"))
-        False ->
-          input.args
-          |> dependency_name(from: config)
-      }
-    }),
+    self_or_dependency(
+      input,
+      task,
+      self: fn(self, _config) { Ok(self) },
+      or: fn(config) {
+        case all {
+          True ->
+            input.args
+            |> list.first
+            |> result.replace_error(snag.new("no package found"))
+          False ->
+            input.args
+            |> dependency_name(from: config)
+        }
+      },
+    ),
   )
 
   let path = case is_self {
@@ -516,7 +519,7 @@ pub fn docs_build(input: CommandInput, task: Task(Result)) -> Result {
       let _print =
         [
           "   Skipping"
-          |> shellout.style(with: shellout.color(["magenta"]), custom: []),
+            |> shellout.style(with: shellout.color(["magenta"]), custom: []),
           name,
         ]
         |> string.join(with: " ")
@@ -526,7 +529,7 @@ pub fn docs_build(input: CommandInput, task: Task(Result)) -> Result {
           "",
           "No gleam.toml file was found in",
           [path, "/"]
-          |> string.concat,
+            |> string.concat,
         ]
         |> string.join(with: "\n")
         |> io.println
@@ -629,7 +632,7 @@ pub fn format(input: CommandInput, task: Task(Result)) -> Result {
 
   use result <- result.try(
     dict.new()
-    |> CommandInput(args: [])
+    |> CommandInput(args: [], named_args: dict.new())
     |> task.basic(input.args)(task)
     |> result.map_error(with: fn(_snag) {
       let check =
@@ -791,11 +794,7 @@ fn do_ping(uri_string: String, headers: List(Header)) -> gleam.Result(Int, Int) 
 
   let script =
     [
-      "fetch('"
-      <> uri_string
-      <> "', "
-      <> headers
-      <> ")",
+      "fetch('" <> uri_string <> "', " <> headers <> ")",
       ".then(response => response.status)",
       ".catch(() => 503)",
       ".then(console.log)",
@@ -871,9 +870,7 @@ fn do_shell(input: CommandInput, task: Task(Result)) -> Result {
   }
   let javascript =
     [
-      "import('"
-      <> util.rad_path
-      <> "/rad_ffi.mjs')",
+      "import('" <> util.rad_path <> "/rad_ffi.mjs')",
       ".then(module => module.load_modules())",
     ]
     |> string.concat
@@ -889,22 +886,14 @@ fn do_shell(input: CommandInput, task: Task(Result)) -> Result {
         util.ebin_paths()
         |> result.replace_error(snag.new("failed to find `ebin` paths")),
       )
-      [
-        [
-          "--eval",
-          "Application.ensure_all_started(:"
-          <> name
-          <> ")
+      [["--eval", "Application.ensure_all_started(:" <> name <> ")
           :code.all_available()
           |> Enum.map(fn {module, _, _} -> List.to_atom(module) end)
-          |> :code.ensure_modules_loaded",
-        ],
-        [
+          |> :code.ensure_modules_loaded"], [
           "--erl",
           ["-pa", ..ebins]
-          |> string.join(with: " "),
-        ],
-      ]
+            |> string.join(with: " "),
+        ]]
       |> list.concat
       |> shellout.command(run: "iex", in: ".", opt: options)
       |> result.replace_error(snag.new("failed to run `elixir` shell"))
@@ -923,8 +912,7 @@ fn do_shell(input: CommandInput, task: Task(Result)) -> Result {
     "nodejs" | "node" ->
       [
         "--interactive",
-        "--eval="
-        <> javascript,
+        "--eval=" <> javascript,
         "--experimental-fetch",
         "--experimental-repl-await",
         "--no-warnings",
@@ -1019,7 +1007,7 @@ pub fn tree(_input: CommandInput, _task: Task(Result)) -> Result {
       "--git",
       "--git-ignore",
       ["--ignore-glob=", ignore_glob]
-      |> string.concat,
+        |> string.concat,
       "--long",
       "--no-filesize",
       "--no-permissions",
@@ -1175,9 +1163,9 @@ fn do_watch(input: CommandInput) -> Result {
 
   [
     " Watching"
-    |> shellout.style(with: shellout.color(["magenta"]), custom: util.lookups),
+      |> shellout.style(with: shellout.color(["magenta"]), custom: util.lookups),
     " … "
-    |> shellout.style(with: shellout.color(["cyan"]), custom: util.lookups),
+      |> shellout.style(with: shellout.color(["cyan"]), custom: util.lookups),
     "(Ctrl+C to quit)",
   ]
   |> string.concat
@@ -1186,11 +1174,11 @@ fn do_watch(input: CommandInput) -> Result {
   let result =
     [
       ignore_glob
-      |> string.split(on: "|")
-      |> list.map(with: fn(directory) {
-        ["--ignore=**/", directory, "/**"]
-        |> string.concat
-      }),
+        |> string.split(on: "|")
+        |> list.map(with: fn(directory) {
+          ["--ignore=**/", directory, "/**"]
+          |> string.concat
+        }),
       ["--no-shell"],
       ["--postpone"],
       ["--watch-when-idle"],
@@ -1212,7 +1200,7 @@ fn do_watch(input: CommandInput) -> Result {
             [
               "--exclude",
               ["^[./\\\\]*(", ignore_glob, ")([/\\\\].*)*$"]
-              |> string.concat,
+                |> string.concat,
             ],
             ["-qq"],
             ["--recursive"],
@@ -1284,10 +1272,10 @@ pub fn watch_do(input: CommandInput, _task: Task(Result)) -> Result {
     False -> {
       [
         " Generating"
-        |> shellout.style(
-          with: shellout.color(["magenta"]),
-          custom: util.lookups,
-        ),
+          |> shellout.style(
+            with: shellout.color(["magenta"]),
+            custom: util.lookups,
+          ),
         "documentation",
       ]
       |> string.join(with: " ")
@@ -1301,7 +1289,7 @@ pub fn watch_do(input: CommandInput, _task: Task(Result)) -> Result {
         |> string.concat
       let _result =
         [uri_string]
-        |> CommandInput(flags: dict.new())
+        |> CommandInput(flags: dict.new(), named_args: dict.new())
         |> ping(task.new(at: [], run: fn(_input, _task) { Ok("") }))
       Nil
     }
@@ -1312,7 +1300,7 @@ pub fn watch_do(input: CommandInput, _task: Task(Result)) -> Result {
     |> workbook.get(["test"])
   [#("target", target_flag)]
   |> dict.from_list
-  |> CommandInput(args: input.args)
+  |> CommandInput(args: input.args, named_args: dict.new())
   |> task.trainer(tests)(task)
 }
 
@@ -1335,60 +1323,60 @@ fn hello_lucy(input: CommandInput, _task: Task(Result)) -> Result {
 "
     |> shellout.style(
       with: style_flags(input.flags)
-      |> dict.merge(from: shellout.display(["bold", "italic"])),
+        |> dict.merge(from: shellout.display(["bold", "italic"])),
       custom: util.lookups,
     )
   let sparkles = shellout.style(
     _,
     with: shellout.display(["bold", "italic"])
-    |> dict.merge(from: shellout.color(["buttercup"])),
+      |> dict.merge(from: shellout.color(["buttercup"])),
     custom: util.lookups,
   )
   let hello_joe =
     [
       "         ",
       "✨"
-      |> sparkles,
+        |> sparkles,
       "Hello, world!"
-      |> shellout.style(
-        with: shellout.display(["bold", "italic"])
-        |> dict.merge(from: shellout.color(["purple"])),
-        custom: util.lookups,
-      ),
+        |> shellout.style(
+          with: shellout.display(["bold", "italic"])
+            |> dict.merge(from: shellout.color(["purple"])),
+          custom: util.lookups,
+        ),
       "✨"
-      |> sparkles,
+        |> sparkles,
     ]
     |> string.join(with: " ")
   let welcome =
     [
       "Welcome to ",
       "Gleam"
-      |> shellout.style(
-        with: shellout.display(["bold"])
-        |> dict.merge(shellout.color(["pink"])),
-        custom: util.lookups,
-      ),
+        |> shellout.style(
+          with: shellout.display(["bold"])
+            |> dict.merge(shellout.color(["pink"])),
+          custom: util.lookups,
+        ),
       "! It's great to have you.",
     ]
     |> string.concat
   let uri = shellout.style(
     _,
     with: shellout.display(["italic"])
-    |> dict.merge(from: shellout.color(["boi-blue"])),
+      |> dict.merge(from: shellout.color(["boi-blue"])),
     custom: util.lookups,
   )
   let website =
     [
       "https://"
-      |> uri,
+        |> uri,
       "gleam.run"
-      |> shellout.style(
-        with: shellout.display(["italic"])
-        |> dict.merge(shellout.color(["pink"])),
-        custom: util.lookups,
-      ),
+        |> shellout.style(
+          with: shellout.display(["italic"])
+            |> dict.merge(shellout.color(["pink"])),
+          custom: util.lookups,
+        ),
       "/documentation/"
-      |> uri,
+        |> uri,
     ]
     |> string.concat
   [

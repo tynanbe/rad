@@ -323,11 +323,11 @@ pub fn snag_pretty_print(snag: Snag) -> String {
   let builder =
     [
       "error"
-      |> bold(and: ["red"]),
+        |> bold(and: ["red"]),
       ": "
-      |> bold([]),
+        |> bold([]),
       snag.issue
-      |> bold([]),
+        |> bold([]),
       "\n",
     ]
     |> string_builder.from_strings
@@ -338,9 +338,9 @@ pub fn snag_pretty_print(snag: Snag) -> String {
       [
         "\n",
         "cause"
-        |> bold(and: ["red"]),
+          |> bold(and: ["red"]),
         ":\n"
-        |> bold([]),
+          |> bold([]),
       ]
       |> string_builder.from_strings
       |> string_builder.append_builder(to: builder)
@@ -355,12 +355,12 @@ fn pretty_print_cause(cause) {
     [
       "  ",
       index
-      |> int.to_string
-      |> bold(and: ["red"]),
+        |> int.to_string
+        |> bold(and: ["red"]),
       ": "
-      |> bold([]),
+        |> bold([]),
       line
-      |> bold([]),
+        |> bold([]),
       "\n",
     ]
     |> string.concat
@@ -372,7 +372,7 @@ fn bold(string, and colors: List(String)) -> String {
   string
   |> shellout.style(
     with: shellout.display(["bold"])
-    |> dict.merge(from: shellout.color(colors)),
+      |> dict.merge(from: shellout.color(colors)),
     custom: lookups,
   )
 }

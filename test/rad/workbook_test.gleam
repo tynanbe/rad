@@ -18,11 +18,11 @@ pub fn from_tasks_test() {
 
   [
     []
-    |> task.new(run: task.basic(["echo"])),
+      |> task.new(run: task.basic(["echo"])),
     ["igglybuff"]
-    |> task.new(run: task.basic(["echo"])),
+      |> task.new(run: task.basic(["echo"])),
     ["jigglypuff", "wigglytuff"]
-    |> task.new(run: task.basic(["echo"])),
+      |> task.new(run: task.basic(["echo"])),
   ]
   |> workbook.from_tasks
   |> dict.size
@@ -43,11 +43,11 @@ pub fn builder_test() {
   let workbook =
     [
       []
-      |> task.new(run: task.basic(["echo"])),
+        |> task.new(run: task.basic(["echo"])),
       ["cleffa"]
-      |> task.new(run: task.basic(["echo"])),
+        |> task.new(run: task.basic(["echo"])),
       ["clefairy", "clefable"]
-      |> task.new(run: task.basic(["echo"])),
+        |> task.new(run: task.basic(["echo"])),
     ]
     |> workbook.tasks(into: workbook.new())
 

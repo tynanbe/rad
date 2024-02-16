@@ -73,7 +73,10 @@ fn do_decode_every(
     |> decode(
       from: toml,
       expect: dynamic.from
-      |> function.compose(dynamic.dict(of: dynamic.string, to: dynamic.dynamic)),
+        |> function.compose(dynamic.dict(
+          of: dynamic.string,
+          to: dynamic.dynamic,
+        )),
     ),
   )
 

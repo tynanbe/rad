@@ -122,50 +122,50 @@ pub fn relay_flags_test() {
     #(
       "rad-test",
       flag.bool()
-      |> flag.default(of: True)
-      |> flag.build,
+        |> flag.default(of: True)
+        |> flag.build,
     ),
     #(
       "eevee",
       flag.bool()
-      |> flag.default(of: False)
-      |> flag.build,
+        |> flag.default(of: False)
+        |> flag.build,
     ),
     #(
       "vaporeon",
       flag.float()
-      |> flag.default(of: 1.0)
-      |> flag.build,
+        |> flag.default(of: 1.0)
+        |> flag.build,
     ),
     #(
       "jolteon",
       flag.float_list()
-      |> flag.default(of: [2.0, 0.2])
-      |> flag.build,
+        |> flag.default(of: [2.0, 0.2])
+        |> flag.build,
     ),
     #(
       "flareon",
       flag.int()
-      |> flag.default(of: 3)
-      |> flag.build,
+        |> flag.default(of: 3)
+        |> flag.build,
     ),
     #(
       "espeon",
       flag.int_list()
-      |> flag.default(of: [4, 0, 4])
-      |> flag.build,
+        |> flag.default(of: [4, 0, 4])
+        |> flag.build,
     ),
     #(
       "umbreon",
       flag.string()
-      |> flag.default(of: "5")
-      |> flag.build,
+        |> flag.default(of: "5")
+        |> flag.build,
     ),
     #(
       "ditto",
       flag.string_list()
-      |> flag.default(of: ["eevee"])
-      |> flag.build,
+        |> flag.default(of: ["eevee"])
+        |> flag.build,
     ),
   ]
   |> flag.build_map

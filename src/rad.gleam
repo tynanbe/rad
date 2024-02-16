@@ -40,16 +40,16 @@ pub fn main() -> Nil {
     |> glint.add(
       at: [],
       do: fn(input: CommandInput) {
-        "with"
-        |> flag.get_string(from: input.flags)
-        |> result.unwrap(or: with)
-      }
-      |> glint.command
-      |> glint.flag(
-        at: "with",
-        of: flag.string()
-        |> flag.default(of: with),
-      ),
+          "with"
+          |> flag.get_string(from: input.flags)
+          |> result.unwrap(or: with)
+        }
+        |> glint.command
+        |> glint.flag(
+          at: "with",
+          of: flag.string()
+            |> flag.default(of: with),
+        ),
     )
     |> glint.execute(arguments(Global))
 
@@ -96,9 +96,9 @@ pub fn do_main(workbook: Workbook) -> Nil {
     |> glint.add(
       at: path,
       do: task.run(_, task)
-      |> glint.command
-      |> glint.flags(with: task.flags)
-      |> glint.description(task.shortdoc),
+        |> glint.command
+        |> glint.flags(with: task.flags)
+        |> glint.description(task.shortdoc),
     )
   })
   |> glint.execute(arguments(Normal))

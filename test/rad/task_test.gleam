@@ -66,30 +66,30 @@ pub fn builder_test() {
   let #(_name, flag1_contents) as flag1 = #(
     "all",
     flag.bool()
-    |> flag.default(of: False)
-    |> flag.description(of: "For one")
-    |> flag.build,
+      |> flag.default(of: False)
+      |> flag.description(of: "For one")
+      |> flag.build,
   )
   let flags = [
     #(
       "one",
       flag.string()
-      |> flag.default(of: "for")
-      |> flag.description(of: "All")
-      |> flag.build,
+        |> flag.default(of: "for")
+        |> flag.description(of: "All")
+        |> flag.build,
     ),
     #(
       "target",
       flag.string_list()
-      |> flag.default(of: ["erlang"])
-      |> flag.build,
+        |> flag.default(of: ["erlang"])
+        |> flag.build,
     ),
   ]
   let #(_name, flag4_contents) as flag4 = #(
     "zero",
     flag.int()
-    |> flag.default(of: 0)
-    |> flag.build,
+      |> flag.default(of: 0)
+      |> flag.build,
   )
   let parameter1 = #("[g]", "")
   let parameters = [#("[h]", ""), #("[i]", "Some j")]
@@ -305,7 +305,7 @@ fn iterable_input() {
     |> dict.from_list
     |> flag.update_flags(with: "--target=erlang,javascript")
   ["a", "b", "c"]
-  |> CommandInput(flags: flags)
+  |> CommandInput(flags: flags, named_args: dict.new())
 }
 
 fn iterable_flags() {
@@ -313,26 +313,26 @@ fn iterable_flags() {
     #(
       "rad-test",
       flag.bool()
-      |> flag.default(of: True)
-      |> flag.build,
+        |> flag.default(of: True)
+        |> flag.build,
     ),
     #(
       "all",
       flag.bool()
-      |> flag.default(of: False)
-      |> flag.build,
+        |> flag.default(of: False)
+        |> flag.build,
     ),
     #(
       "check",
       flag.bool()
-      |> flag.default(of: False)
-      |> flag.build,
+        |> flag.default(of: False)
+        |> flag.build,
     ),
     #(
       "target",
       flag.string_list()
-      |> flag.default(of: ["erlang"])
-      |> flag.build,
+        |> flag.default(of: ["erlang"])
+        |> flag.build,
     ),
   ]
 }
