@@ -16,6 +16,7 @@ title = "Website"
 
 [dependencies]
 gleam_http = "~> 3.5"
+gleam_httpc = "~> 2.1"
 gleam_json = "~> 0.7 or ~> 1.0"
 gleam_stdlib = "~> 0.34 or ~> 1.0"
 glint = "~> 0.15 or ~> 1.0"
@@ -56,4 +57,8 @@ run = ["echo", "✨ It's been a long road getting here..."]
 
 [[rad.tasks]]
 path = ["sparkling", "heart"]
-run = ["sh", "-c", "echo '💖 I was staring out the window and there it was, just fluttering there...' $(rad version)!"]
+run = ["sh", "-euc", """
+  echo \
+    💖 I was staring out the window and there it was, just fluttering there... \
+    $(rad version)!
+"""]

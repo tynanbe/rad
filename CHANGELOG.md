@@ -2,9 +2,11 @@
 
 ## Unreleased
 
+- Rad now uses npm package `smol-toml` for more feature-complete TOML parsing.
 - Rad now supports `gleam_stdlib` v1.0.
 - Rad now requires Gleam v0.34 or later.
 - Rad now requires `glint` v0.15 or later.
+- Rad once again depends on `gleam_httpc` for the Erlang target.
 
 ## v1.0.0 - 2023-12-21
 

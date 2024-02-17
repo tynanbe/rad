@@ -6,7 +6,7 @@ import { classify_dynamic } from "../gleam_stdlib/gleam_stdlib.mjs";
 import { DecodeError } from "../gleam_stdlib/gleam/dynamic.mjs";
 import * as shellout from "../shellout/shellout.mjs";
 import * as snag from "../snag/snag.mjs";
-import * as TOML from "./priv/node_modules/@ltd/j-toml/index.mjs";
+import * as TOML from "./priv/node_modules/smol-toml/dist/index.js";
 import * as util from "./rad/util.mjs";
 
 const Nil = undefined;
@@ -275,5 +275,5 @@ export function working_directory() {
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~//
 
 export function no_fun() {
-  throw Error("Unsupported target");
+  throw new Error("Unsupported target");
 }

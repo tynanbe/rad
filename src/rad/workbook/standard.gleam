@@ -41,7 +41,7 @@ import snag.{type Snag}
 @target(erlang)
 import gleam/http/request
 @target(erlang)
-import rad/internal/httpc
+import gleam/httpc
 @target(javascript)
 import gleam/json
 
@@ -767,11 +767,6 @@ fn do_ping(uri_string: String, headers: List(Header)) -> gleam.Result(Int, Int) 
   use request <- result.try(
     uri
     |> request.from_uri
-    |> result.replace_error(400),
-  )
-
-  use _ <- result.try(
-    httpc.ensure_started()
     |> result.replace_error(400),
   )
 

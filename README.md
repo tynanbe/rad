@@ -225,7 +225,11 @@ run = ["echo", "✨ It's been a long road getting here..."]
 
 [[rad.tasks]]
 path = ["sparkling", "heart"]
-run = ["sh", "-c", "echo '💖 I was staring out the window and there it was, just fluttering there...' $(rad version)!"]
+run = ["sh", "-euc", """
+  echo \
+    💖 I was staring out the window and there it was, just fluttering there... \
+    $(rad version)!
+"""]
 ```
 
 #### `[rad]`
