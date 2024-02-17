@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.1.0 - 2024-02-17
 
 - Rad now uses npm package `smol-toml` for more feature-complete TOML parsing.
 - Rad now supports `gleam_stdlib` v1.0.
