@@ -1,6 +1,5 @@
 import gleam/dict
 import gleam/dynamic
-import gleam/function
 import gleam/int
 import gleam/list
 import gleam/result
@@ -433,11 +432,11 @@ pub fn trainer_test() {
     |> task.new(run: fn(input, _task) {
       input.args
       |> list.map(with: fn(arg) {
-        let not_oddish =
+        let not_oddish = fn(_) {
           ["not", arg]
           |> string.join(with: " ")
           |> snag.new
-          |> function.constant
+        }
         use maybe_oddish <- result.try(
           arg
           |> int.parse

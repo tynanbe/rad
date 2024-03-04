@@ -344,14 +344,14 @@ pub fn info(config: Toml) -> Result {
   let version =
     ["version"]
     |> toml.decode(from: config, expect: dynamic.string)
-    |> result.map(
-      with: string.append(to: "v", suffix: _)
-      |> function.compose(shellout.style(
-        _,
+    |> result.map(with: fn(version) {
+      version
+      |> string.append(to: "v")
+      |> shellout.style(
         with: shellout.display(["italic"]),
         custom: util.lookups,
-      )),
-    )
+      )
+    })
     |> option.from_result
 
   let description =

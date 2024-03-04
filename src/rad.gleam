@@ -1,7 +1,5 @@
-import gleam/bool
 import gleam/dict
 import gleam/dynamic
-import gleam/function
 import gleam/io
 import gleam/list
 import gleam/result
@@ -108,6 +106,7 @@ pub fn do_main(workbook: Workbook) -> Nil {
       Help(string) -> Ok(string)
     }
   })
+  |> result.map_error(with: snag.new)
   |> result.flatten
   |> end_task
 }
@@ -123,9 +122,7 @@ fn arguments(scope: Scope) -> List(String) {
     start_arguments()
     |> list.filter(keeping: case scope {
       Global -> filter
-      Normal ->
-        filter
-        |> function.compose(bool.negate)
+      Normal -> fn(arg) { !filter(arg) }
     })
   case scope {
     Global -> arguments

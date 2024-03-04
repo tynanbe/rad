@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Rad now requires `glint` v0.16 or later.
+
 ## v1.1.0 - 2024-02-17
 
 - Rad now uses npm package `smol-toml` for more feature-complete TOML parsing.

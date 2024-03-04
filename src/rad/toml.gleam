@@ -14,8 +14,6 @@ import gleam/string
 import snag.{type Snag}
 @target(erlang)
 import gleam/dict
-@target(erlang)
-import gleam/function
 
 /// A TOML [table](https://toml.io/en/v1.0.0#table) of dynamic data.
 ///
@@ -70,14 +68,11 @@ fn do_decode_every(
 ) -> Result(List(#(String, a)), Snag) {
   use dict <- result.try(
     key_path
-    |> decode(
-      from: toml,
-      expect: dynamic.from
-        |> function.compose(dynamic.dict(
-          of: dynamic.string,
-          to: dynamic.dynamic,
-        )),
-    ),
+    |> decode(from: toml, expect: fn(toml) {
+      toml
+      |> dynamic.from
+      |> dynamic.dict(of: dynamic.string, to: dynamic.dynamic)
+    }),
   )
 
   dict

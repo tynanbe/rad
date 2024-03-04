@@ -20,7 +20,6 @@
 import gleam
 import gleam/dict
 import gleam/dynamic
-import gleam/function
 import gleam/http.{type Header}
 import gleam/int
 import gleam/io
@@ -750,10 +749,11 @@ pub fn ping(input: CommandInput, _task: Task(Result)) -> Result {
   |> uri.to_string
   |> do_ping([#("cache-control", "no-cache, no-store")])
   |> result.map(with: int.to_string)
-  |> result.map_error(
-    with: int.to_string
-    |> function.compose(snag.new),
-  )
+  |> result.map_error(with: fn(status) {
+    status
+    |> int.to_string
+    |> snag.new
+  })
 }
 
 @target(erlang)
@@ -1028,12 +1028,11 @@ pub fn tree(_input: CommandInput, _task: Task(Result)) -> Result {
       |> shellout.command(run: "tree", in: ".", opt: [])
       |> result.replace_error(snag.layer(error, "command `tree` not found"))
   }
-  |> result.map_error(
-    with: function.compose(
-      snag.layer(_, "failed to find a known tree command"),
-      snag.layer(_, "failed to run task"),
-    ),
-  )
+  |> result.map_error(with: fn(snag) {
+    snag
+    |> snag.layer("failed to find a known tree command")
+    |> snag.layer("failed to run task")
+  })
 }
 
 /// Prints stylized versions for packages found in your project's `gleam.toml`
@@ -1214,12 +1213,11 @@ fn do_watch(input: CommandInput) -> Result {
         "command `inotifywait` not found",
       ))
   }
-  |> result.map_error(
-    with: function.compose(
-      snag.layer(_, "failed to find a known watcher command"),
-      snag.layer(_, "failed to run task"),
-    ),
-  )
+  |> result.map_error(with: fn(snag) {
+    snag
+    |> snag.layer("failed to find a known watcher command")
+    |> snag.layer("failed to run task")
+  })
 }
 
 @target(javascript)

@@ -405,8 +405,11 @@ pub fn relay_flags(flags: flag.Map) -> List(String) {
     get_fun: fn(Flag) -> snag.Result(List(a)),
     string_fun,
   ) {
-    list.map(_, with: string_fun)
-    |> function.compose(string.join(_, with: ","))
+    fn(flags) {
+      flags
+      |> list.map(with: string_fun)
+      |> string.join(with: ",")
+    }
     |> relay_flag(get_fun, _)
   }
 
@@ -474,7 +477,7 @@ const test_flag = "rad-test"
 ///
 pub fn quiet_or_print(input: CommandInput) -> fn(String) -> Nil {
   case is_test(input) {
-    True -> function.constant(Nil)
+    True -> fn(_) { Nil }
     False -> io.print
   }
 }
@@ -487,7 +490,7 @@ pub fn quiet_or_print(input: CommandInput) -> fn(String) -> Nil {
 ///
 pub fn quiet_or_println(input: CommandInput) -> fn(String) -> Nil {
   case is_test(input) {
-    True -> function.constant(Nil)
+    True -> fn(_) { Nil }
     False -> io.println
   }
 }
