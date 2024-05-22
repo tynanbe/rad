@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Rad now requires `glint` less than v1.0.
+
 ## v1.2.0 - 2024-03-03
 
 - Rad now requires `glint` v0.16 or later.
