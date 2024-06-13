@@ -140,7 +140,7 @@ const ok_signals = [...Array(3)].map((_, i) => i + 385);
 export function watch_loop(watch_fun, do_fun) {
   while (true) {
     let result = watch_fun();
-    if (result.isOk()) {
+    if (result instanceof Ok) {
       do_fun();
     } else if (ok_signals.includes(result[0][0])) {
       // Exit successfully on some signals.
@@ -170,7 +170,7 @@ export function decode_object(data) {
 
 export function toml_decode_every(toml, key_path, decoder) {
   let result = toml_get(toml, key_path);
-  if (!result.isOk()) {
+  if (result instanceof GleamError) {
     let decode_error = new DecodeError("field", "nothing", key_path);
     return new GleamError(toList([decode_error]));
   }
@@ -178,7 +178,7 @@ export function toml_decode_every(toml, key_path, decoder) {
   let items = Object.keys(toml)
     .map((key) => {
       let result = decoder(toml[key]);
-      return [key, result.isOk() ? result[0] : Nil];
+      return [key, result instanceof Ok ? result[0] : Nil];
     })
     .filter(([_key, value]) => Nil !== value);
   return new Ok(toList(items));
